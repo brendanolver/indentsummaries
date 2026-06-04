@@ -1401,58 +1401,59 @@ function exportPDF() {
   const { jsPDF } = window.jspdf;
   const ML = 10, MR = 10, PW = 297, PH = 210;
   const TW = PW - ML - MR;
-  const LOGO_W = 52; // dark logo panel width
   const dateStr = new Date().toLocaleDateString('en-AU', {day:'2-digit', month:'short', year:'numeric'});
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
-  // Grab the logo src directly from the app header img element
   const logoEl  = document.querySelector('.wordmark img');
   const logoSrc = logoEl ? logoEl.src : null;
 
   function drawPageHeader() {
     const HDR_H = 22, HDR_Y = 6;
 
-    // Left dark panel — logo sits here (white PNG visible on dark bg)
-    doc.setFillColor(28, 28, 28);
-    doc.rect(ML, HDR_Y, LOGO_W, HDR_H, 'F');
+    // White header background
+    doc.setFillColor(255, 255, 255);
+    doc.rect(ML, HDR_Y, TW, HDR_H, 'F');
 
-    // Right light panel
-    doc.setFillColor(248, 248, 246);
-    doc.rect(ML + LOGO_W, HDR_Y, TW - LOGO_W, HDR_H, 'F');
+    // Logo — maintain natural aspect ratio, sized by height
+    const logoH = 14;
+    let logoW   = 42; // fallback if can't read natural dimensions
+    if (logoEl && logoEl.naturalWidth && logoEl.naturalHeight) {
+      logoW = Math.round(logoH * (logoEl.naturalWidth / logoEl.naturalHeight));
+    }
+    const logoY = HDR_Y + (HDR_H - logoH) / 2;
 
-    // Logo image — white PNG on dark panel
     if (logoSrc) {
       try {
-        doc.addImage(logoSrc, 'PNG', ML + 3, HDR_Y + 3, LOGO_W - 6, HDR_H - 6);
+        doc.addImage(logoSrc, 'PNG', ML + 2, logoY, logoW, logoH);
       } catch(e) {
-        // fallback text if image fails
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
-        doc.setTextColor(255, 255, 255);
-        doc.text('WNDRR', ML + 5, HDR_Y + 14);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(18);
+        doc.setTextColor(17, 17, 17);
+        doc.text('WNDRR', ML + 3, HDR_Y + 14);
       }
     }
 
-    // Thin separator between panels
-    doc.setDrawColor(80, 80, 80);
-    doc.setLineWidth(0.3);
-    doc.line(ML + LOGO_W, HDR_Y, ML + LOGO_W, HDR_Y + HDR_H);
+    // Thin vertical separator after logo
+    const sepX = ML + logoW + 6;
+    doc.setDrawColor(200, 200, 198);
+    doc.setLineWidth(0.4);
+    doc.line(sepX, HDR_Y + 4, sepX, HDR_Y + HDR_H - 4);
 
-    // Title text on right panel
+    // Title
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8.5);
-    doc.setTextColor(30, 30, 30);
-    doc.text('INDENT ORDER SUMMARY', ML + LOGO_W + 5, HDR_Y + 9);
+    doc.setTextColor(25, 25, 25);
+    doc.text('INDENT ORDER SUMMARY', sepX + 5, HDR_Y + 9);
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(6.5);
-    doc.setTextColor(110, 110, 110);
-    doc.text('Need to Buy Report', ML + LOGO_W + 5, HDR_Y + 16);
+    doc.setTextColor(120, 120, 120);
+    doc.text('Need to Buy Report', sepX + 5, HDR_Y + 16);
 
     // Date right-aligned
     doc.text(dateStr, PW - MR - 3, HDR_Y + 16, { align: 'right' });
 
     // Bottom rule
-    doc.setDrawColor(200, 200, 198);
+    doc.setDrawColor(210, 210, 208);
     doc.setLineWidth(0.3);
     doc.line(ML, HDR_Y + HDR_H, PW - MR, HDR_Y + HDR_H);
 
@@ -1479,7 +1480,7 @@ function exportPDF() {
 
   collections.forEach(coll => {
     body.push([{ content: coll, colSpan: hdrs.length, styles: {
-      fillColor: [55, 55, 55], textColor: [255,255,255], fontStyle: 'bold',
+      fillColor: [55,55,55], textColor: [255,255,255], fontStyle: 'bold',
       fontSize: 7.5, cellPadding: { top: 3.5, bottom: 3.5, left: 5, right: 5 }
     }}]);
     bodyMeta.push({ type: 'coll' });
@@ -1569,15 +1570,14 @@ function exportPDF() {
       if (!meta || meta.type === 'coll') return;
       const isGrand = data.column.index === grandI;
       if (meta.isCancelled) {
-        data.cell.styles.fillColor = [255, 232, 232];
-        data.cell.styles.textColor = [185, 30, 30];
+        data.cell.styles.fillColor = [255,232,232];
+        data.cell.styles.textColor = [185,30,30];
         data.cell.styles.fontStyle = 'italic';
       } else if (meta.type === 'subtotal') {
         data.cell.styles.fillColor = isGrand ? [215,215,213] : [232,232,230];
         data.cell.styles.fontStyle = 'bold';
         data.cell.styles.textColor = [20,20,20];
       } else {
-        // Full-width alternating rows
         data.cell.styles.fillColor = meta.even ? [245,245,243] : [255,255,255];
         if (isGrand) data.cell.styles.fontStyle = 'bold';
       }
@@ -1586,9 +1586,9 @@ function exportPDF() {
       if (data.pageNumber > 1) drawPageHeader();
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(6.5);
-      doc.setTextColor(170, 170, 170);
+      doc.setTextColor(170,170,170);
       doc.text('Page ' + data.pageNumber, PW / 2, PH - 4, { align: 'center' });
-      doc.setTextColor(0, 0, 0);
+      doc.setTextColor(0,0,0);
     }
   });
 
