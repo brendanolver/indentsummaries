@@ -1399,99 +1399,167 @@ function exportXLSX() {
 // ── Export: PDF ───────────────────────────────────────────────────────────────
 function exportPDF() {
   const { jsPDF } = window.jspdf;
+  const ML = 10, MR = 10, PW = 297, PH = 210;
+  const TW = PW - ML - MR;
+  const dateStr = new Date().toLocaleDateString('en-AU', {day:'2-digit', month:'short', year:'numeric'});
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  doc.setFontSize(16); doc.setFont('helvetica', 'bold');
-  doc.text('WNDRR', 14, 16);
-  doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(120);
-  doc.text('Indent Order Summary — Need to Buy Report', 14, 22);
-  doc.text(new Date().toLocaleDateString('en-AU', {day:'2-digit', month:'short', year:'numeric'}), 14, 27);
-  doc.setTextColor(0);
+
+  function drawPageHeader() {
+    doc.setFillColor(17, 17, 17);
+    doc.rect(ML, 6, TW, 22, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(20);
+    doc.setTextColor(255, 255, 255);
+    doc.text('WNDRR', ML + 5, 20);
+    doc.setDrawColor(60, 60, 60);
+    doc.setLineWidth(0.4);
+    doc.line(ML + 44, 10, ML + 44, 26);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(200, 200, 200);
+    doc.text('INDENT ORDER SUMMARY', ML + 48, 16);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(140, 140, 140);
+    doc.text('Need to Buy Report', ML + 48, 22);
+    doc.text(dateStr, PW - MR - 4, 22, { align: 'right' });
+    doc.setTextColor(0, 0, 0);
+  }
+
+  drawPageHeader();
 
   const { collections, collMap } = getVisibleRows();
-
-  // Active sizes with at least one unit across all visible rows
   const activeSizes = sizesVisible
     ? sizeColumns.filter(sz => Object.values(collMap).some(rows => rows.some(r => r.sizes[sz])))
     : [];
 
   const hdrs = ['Style', 'Description', 'Colour', 'Category'];
-  activeSizes.forEach(sz => hdrs.push(sz));          // one column per size
+  activeSizes.forEach(sz => hdrs.push(sz));
   if (!totalsOnly) hdrs.push('Indent Orders', 'Online Order', 'Month Del');
-  hdrs.push('Grand Total', 'Cancelled');
+  if (onlineStoreOrdersLoaded) hdrs.push('Online On Order');
+  if (amStockLoaded)           hdrs.push('Avail Sell');
+  hdrs.push('Grand Total');
 
-  const body = [];
+  const body     = [];
   const bodyMeta = [];
+  const grandI   = hdrs.length - 1;
 
   collections.forEach(coll => {
-    // Collection header
-    body.push([{ content: coll, colSpan: hdrs.length, styles: { fillColor: [17,17,17], textColor: [255,255,255], fontStyle: 'bold', fontSize: 7 } }]);
+    body.push([{ content: coll, colSpan: hdrs.length, styles: {
+      fillColor: [17,17,17], textColor: [255,255,255], fontStyle: 'bold',
+      fontSize: 8, cellPadding: { top: 4, bottom: 4, left: 5, right: 5 }
+    }}]);
     bodyMeta.push({ type: 'coll' });
 
     let rowIdx = 0;
     collMap[coll].forEach(row => {
       const oo = onlineOrders[row.style] || 0;
       const t  = sizeColumns.reduce((s, sz) => s + (row.sizes[sz] || 0), 0);
+      const isCancelled = !!cancelled[row.style];
+      const grand = isCancelled ? 0 : t + oo;
       const dataRow = [row.style, row.desc, row.colour, row.category];
       activeSizes.forEach(sz => dataRow.push(row.sizes[sz] || ''));
-      if (!totalsOnly) dataRow.push(t, oo, monthDel[row.style] || '');
-      dataRow.push(t + oo, cancelled[row.style] ? '✓' : '');
+      if (!totalsOnly) {
+        dataRow.push(isCancelled ? '—' : t.toLocaleString());
+        dataRow.push(isCancelled ? '—' : (oo || ''));
+        dataRow.push(monthDel[row.style] || '');
+      }
+      if (onlineStoreOrdersLoaded) {
+        const v = onlineStoreOrders[row.style];
+        dataRow.push(isCancelled ? '—' : (v ? Math.round(v).toLocaleString() : '—'));
+      }
+      if (amStockLoaded) {
+        const v = amStock[row.style];
+        dataRow.push(isCancelled ? '—' : (v == null ? '—' : Math.round(v).toLocaleString()));
+      }
+      dataRow.push(grand ? grand.toLocaleString() : '—');
       body.push(dataRow);
-      bodyMeta.push({ type: 'data', even: rowIdx % 2 === 1, isCancelled: !!cancelled[row.style] });
+      bodyMeta.push({ type: 'data', even: rowIdx % 2 === 1, isCancelled });
       rowIdx++;
     });
 
-    // Subtotal
-    const collTotal = collMap[coll].reduce((s,r) => s + sizeColumns.reduce((ss,sz) => ss+(r.sizes[sz]||0),0), 0);
-    const collOO    = collMap[coll].reduce((s,r) => s + (onlineOrders[r.style]||0), 0);
-    const subRow = Array(hdrs.length).fill('');
-    subRow[0] = coll + ' — Total';
-    subRow[hdrs.indexOf('Grand Total')] = collTotal + collOO;
-    if (!totalsOnly) {
-      subRow[hdrs.indexOf('Indent Orders')] = collTotal;
-      subRow[hdrs.indexOf('Online Order')]  = collOO;
-    }
+    const collTotal = collMap[coll].filter(r => !cancelled[r.style]).reduce((s,r) => s + sizeColumns.reduce((ss,sz) => ss+(r.sizes[sz]||0),0), 0);
+    const collOO    = collMap[coll].filter(r => !cancelled[r.style]).reduce((s,r) => s + (onlineOrders[r.style]||0), 0);
+    const subRow    = Array(hdrs.length).fill('');
+    subRow[0]     = coll + ' — Total';
+    subRow[grandI] = (collTotal + collOO).toLocaleString();
+    const iIdx = hdrs.indexOf('Indent Orders'), oIdx = hdrs.indexOf('Online Order');
+    if (iIdx !== -1) subRow[iIdx] = collTotal.toLocaleString();
+    if (oIdx !== -1) subRow[oIdx] = collOO.toLocaleString();
     body.push(subRow);
     bodyMeta.push({ type: 'subtotal' });
   });
 
-  // Column styles — fixed cols then narrow size cols then totals
-  const colStyles = { 0: {cellWidth:18}, 1: {cellWidth:28}, 2: {cellWidth:16}, 3: {cellWidth:14} };
+  const colStyles = {
+    0: { cellWidth: 26, font: 'courier', fontSize: 7 },
+    1: { cellWidth: 62 },
+    2: { cellWidth: 28 },
+    3: { cellWidth: 24 },
+  };
   let ci = 4;
-  activeSizes.forEach(() => { colStyles[ci] = {cellWidth: 9, halign: 'center'}; ci++; });
-  if (!totalsOnly) { colStyles[ci]={cellWidth:13}; colStyles[ci+1]={cellWidth:13}; colStyles[ci+2]={cellWidth:11}; ci+=3; }
-  colStyles[ci] = {cellWidth:13}; // Grand Total
-  colStyles[ci+1] = {cellWidth:9, halign:'center'}; // Cancelled
+  activeSizes.forEach(() => { colStyles[ci] = { cellWidth: 9, halign: 'center' }; ci++; });
+  if (!totalsOnly) {
+    colStyles[ci]   = { cellWidth: 20, halign: 'right' }; ci++;
+    colStyles[ci]   = { cellWidth: 16, halign: 'right' }; ci++;
+    colStyles[ci]   = { cellWidth: 15 };                   ci++;
+  }
+  if (onlineStoreOrdersLoaded) { colStyles[ci] = { cellWidth: 20, halign: 'right' }; ci++; }
+  if (amStockLoaded)           { colStyles[ci] = { cellWidth: 20, halign: 'right' }; ci++; }
+  colStyles[grandI] = { cellWidth: 22, halign: 'right' };
 
   doc.autoTable({
-    startY: 31,
-    head: [hdrs],
+    startY: 32,
+    head:   [hdrs],
     body,
-    theme: 'grid',
-    styles: { fontSize: 6.5, cellPadding: 1.5, overflow: 'linebreak', font: 'helvetica', textColor: [50,50,50] },
-    headStyles: { fillColor: [17,17,17], textColor: [255,255,255], fontStyle: 'bold', fontSize: 6.5, halign: 'center' },
+    theme:  'plain',
+    styles: {
+      fontSize: 7.5, cellPadding: { top: 2.5, bottom: 2.5, left: 3, right: 3 },
+      overflow: 'hidden', font: 'helvetica', textColor: [40,40,40],
+      lineColor: [225,225,223], lineWidth: 0.15,
+    },
+    headStyles: {
+      fillColor: [17,17,17], textColor: [255,255,255], fontStyle: 'bold',
+      fontSize: 7, cellPadding: { top: 3.5, bottom: 3.5, left: 3, right: 3 },
+      lineWidth: 0, overflow: 'hidden',
+    },
     columnStyles: colStyles,
-    margin: { left: 8, right: 8 },
-    tableWidth: 'auto',
+    margin: { left: ML, right: MR, top: 32 },
+    tableWidth: TW,
     didParseCell: function(data) {
+      if (data.section === 'head') {
+        if (data.column.index >= 4) data.cell.styles.halign = 'right';
+        return;
+      }
       if (data.section !== 'body') return;
       const meta = bodyMeta[data.row.index];
-      if (!meta) return;
+      if (!meta || meta.type === 'coll') return;
+      const isGrand = data.column.index === grandI;
       if (meta.isCancelled) {
-        data.cell.styles.fillColor = [255, 224, 224];
-        data.cell.styles.textColor = [180, 30, 30];
+        data.cell.styles.fillColor = [255,232,232];
+        data.cell.styles.textColor = [185,30,30];
         data.cell.styles.fontStyle = 'italic';
       } else if (meta.type === 'subtotal') {
-        data.cell.styles.fillColor = [240, 240, 238];
+        data.cell.styles.fillColor = isGrand ? [220,220,218] : [238,238,236];
         data.cell.styles.fontStyle = 'bold';
-        data.cell.styles.textColor = [50, 50, 50];
-      } else if (meta.even) {
-        data.cell.styles.fillColor = [247, 247, 245];
+        data.cell.styles.textColor = [17,17,17];
       } else {
-        data.cell.styles.fillColor = [255, 255, 255];
+        data.cell.styles.fillColor = isGrand
+          ? (meta.even ? [238,238,236] : [248,248,246])
+          : (meta.even ? [247,247,245] : [255,255,255]);
+        if (isGrand) data.cell.styles.fontStyle = 'bold';
       }
+    },
+    didDrawPage: function(data) {
+      if (data.pageNumber > 1) drawPageHeader();
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6.5);
+      doc.setTextColor(170,170,170);
+      doc.text('Page ' + data.pageNumber, PW / 2, PH - 4, { align: 'center' });
+      doc.setTextColor(0,0,0);
     }
   });
-  // Month Totals page
+
+    // Month Totals page
   const { monthMap, monthOrder } = buildMonthTotalsData();
   if (monthOrder.length > 0) {
     doc.addPage();
