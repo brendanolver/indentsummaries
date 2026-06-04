@@ -156,7 +156,7 @@ tr.coll-spacer td{height:20px;background:#f2f2f0;border:none;padding:0}
   <div class="header-actions">
     <input type="file" id="replace-input" accept=".csv" style="display:none">
     <button class="btn" id="replace-btn" style="display:none" onclick="document.getElementById('replace-input').click()">Upload New CSV</button>
-    <button class="btn" id="toggle-sizes-btn" style="display:none" onclick="toggleSizes()">Hide Sizes</button>
+    <button class="btn btn-active" id="toggle-sizes-btn" style="display:none" onclick="toggleSizes()">Show Sizes</button>
     <button class="btn" id="toggle-totals-btn" style="display:none" onclick="toggleTotals()">Grand Total Only</button>
     <button class="btn" id="toggle-month-btn" style="display:none" onclick="toggleMonthTotals()">Month Totals</button>
     <button class="btn" id="fetch-am-btn" style="display:none" onclick="fetchAMStock()">↻ Refresh Stock</button>
@@ -292,7 +292,7 @@ let searchQuery = '';
 let filterCollections = new Set();
 let filterCategories = new Set();
 let filterMonthDel = new Set();
-let sizesVisible = true;
+let sizesVisible = false;
 let totalsOnly = false;
 
 // ── Upload ──────────────────────────────────────────────────────────────────
