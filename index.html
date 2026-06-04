@@ -744,11 +744,15 @@ function renderTable() {
     stLabelTd.textContent = coll + ' — Total';
     str.appendChild(stLabelTd);
     if (!totalsOnly) {
-      const stTotal = document.createElement('td'); stTotal.className = 'num'; stTotal.textContent = collTotal.toLocaleString(); str.appendChild(stTotal);
-      const stOO    = document.createElement('td'); stOO.className    = 'online-orders-col'; stOO.style.fontWeight='800'; stOO.style.fontSize='11px'; stOO.textContent = collOO.toLocaleString(); str.appendChild(stOO);
-      const stMD    = document.createElement('td'); stMD.className    = 'online-orders-col'; stMD.textContent = ''; str.appendChild(stMD);
+      const stIndent = document.createElement('td'); stIndent.className = 'num subtotal-indent'; stIndent.textContent = collTotal.toLocaleString(); str.appendChild(stIndent);
     }
-    const stGrand = document.createElement('td'); stGrand.className = 'grand-total-col'; stGrand.textContent = (collTotal + collOO).toLocaleString(); str.appendChild(stGrand);
+    if (amStockLoaded)           { const td = document.createElement('td'); str.appendChild(td); } // avail sell placeholder
+    if (onlineStoreOrdersLoaded) { const td = document.createElement('td'); str.appendChild(td); } // online on order placeholder
+    if (!totalsOnly) {
+      const stOO = document.createElement('td'); stOO.className = 'online-orders-col subtotal-oo'; stOO.style.fontWeight='800'; stOO.style.fontSize='11px'; stOO.textContent = collOO.toLocaleString(); str.appendChild(stOO);
+      const stMD = document.createElement('td'); stMD.className = 'online-orders-col'; stMD.textContent = ''; str.appendChild(stMD);
+    }
+    const stGrand = document.createElement('td'); stGrand.className = 'grand-total-col subtotal-grand'; stGrand.textContent = (collTotal + collOO).toLocaleString(); str.appendChild(stGrand);
     tbody.appendChild(str);
 
     // ── Spacer ──
@@ -768,21 +772,22 @@ function updateCollSubtotal(tbody, coll) {
   const str = tbody.querySelector('tr.coll-subtotal[data-coll="' + CSS.escape(coll) + '"]');
   if (!str) return;
   let t = 0, oo = 0;
-  // walk sibling rows between the coll-col-header and this subtotal
   let el = str.previousElementSibling;
   while (el && !el.classList.contains('coll-col-header')) {
     if (!el.classList.contains('coll-subtotal') && !el.classList.contains('coll-spacer') && !el.classList.contains('collection-header')) {
-      const tc = el.querySelector('.total-col'), inp = el.querySelector('input[type=number].oo-input');
-      if (tc) t  += parseInt(tc.textContent.replace(/,/g,''),10)||0;
-      if (inp) oo += parseInt(inp.value,10)||0;
+      const tc  = el.querySelector('.total-col');
+      const inp = el.querySelector('input[type=number].oo-input');
+      if (tc)  t  += parseInt(tc.textContent.replace(/,/g,''), 10) || 0;
+      if (inp) oo += parseInt(inp.value, 10) || 0;
     }
     el = el.previousElementSibling;
   }
-  const cells = str.querySelectorAll('td');
-  cells[cells.length-4].textContent = t.toLocaleString();   // Indent Orders
-  cells[cells.length-3].textContent = oo.toLocaleString();  // Online Order
-  // cells[cells.length-2] = Month Del (blank, skip)
-  cells[cells.length-1].textContent = (t+oo).toLocaleString(); // Grand Total
+  const indentCell = str.querySelector('.subtotal-indent');
+  const ooCell     = str.querySelector('.subtotal-oo');
+  const grandCell  = str.querySelector('.subtotal-grand');
+  if (indentCell) indentCell.textContent = t.toLocaleString();
+  if (ooCell)     ooCell.textContent     = oo.toLocaleString();
+  if (grandCell)  grandCell.textContent  = (t + oo).toLocaleString();
 }
 
 
