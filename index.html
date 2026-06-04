@@ -194,7 +194,7 @@ tr.coll-spacer td{height:20px;background:#f2f2f0;border:none;padding:0}
   <div class="summary-bar">
     <div class="summary-stat"><span class="summary-label">Styles</span><span class="summary-value" id="stat-rows">—</span></div>
     <div class="summary-stat"><span class="summary-label">Indent Order Units</span><span class="summary-value" id="stat-units">—</span></div>
-    <div class="summary-stat"><span class="summary-label">Online On Order Units</span><span class="summary-value" id="stat-online-orders">—</span></div>
+    <div class="summary-stat"><span class="summary-label">Online Order Units</span><span class="summary-value" id="stat-online-orders">—</span></div>
     <div class="summary-stat"><span class="summary-label">Grand Total</span><span class="summary-value" id="stat-grand">—</span></div>
   </div>
   <div id="main-view">
@@ -989,10 +989,10 @@ function updateSummary(rows, units, grand) {
   document.getElementById('stat-units').textContent = units.toLocaleString();
   document.getElementById('stat-grand').textContent = grand.toLocaleString();
   // Online On Order: sum from onlineStoreOrders for non-cancelled visible rows
-  const ooTotal = Object.entries(onlineStoreOrders).reduce((s, [style, qty]) => {
+  const ooTotal = Object.entries(onlineOrders).reduce((s, [style, qty]) => {
     return s + (cancelled[style] ? 0 : (qty || 0));
   }, 0);
-  document.getElementById('stat-online-orders').textContent = onlineStoreOrdersLoaded ? Math.round(ooTotal).toLocaleString() : '—';
+  document.getElementById('stat-online-orders').textContent = ooTotal.toLocaleString();
 }
 
 function updateSummaryLive() {
@@ -1006,10 +1006,10 @@ function updateSummaryLive() {
   document.getElementById('stat-rows').textContent  = r.toLocaleString();
   document.getElementById('stat-units').textContent = u.toLocaleString();
   document.getElementById('stat-grand').textContent = g.toLocaleString();
-  const ooTotal = Object.entries(onlineStoreOrders).reduce((s, [style, qty]) => {
+  const ooTotal = Object.entries(onlineOrders).reduce((s, [style, qty]) => {
     return s + (cancelled[style] ? 0 : (qty || 0));
   }, 0);
-  document.getElementById('stat-online-orders').textContent = onlineStoreOrdersLoaded ? Math.round(ooTotal).toLocaleString() : '—';
+  document.getElementById('stat-online-orders').textContent = ooTotal.toLocaleString();
 }
 
 // ── Show app ─────────────────────────────────────────────────────────────────
