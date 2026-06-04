@@ -703,6 +703,9 @@ function renderTable() {
         tr.appendChild(tdMD);
       }
 
+      // Grand Total
+      addTd(tr, isCancelled ? '0' : grand.toLocaleString(), 'grand-total-col');
+
       // Cancel checkbox
       const tdCancel = document.createElement('td');
       tdCancel.className = 'cancel-col';
