@@ -1,6 +1,31 @@
+const https   = require('https');
+const url_mod = require('url');
+
 const AM_BASE  = 'https://kohindustries.app.apparelmagic.com/api';
 const AM_TOKEN = 'cff4a1e4a3d0b3726a4117e4f14a618a';
 const ALLOWED  = ['products', 'inventory', 'orders', 'warehouses'];
+
+function amFetch(path) {
+  return new Promise((resolve, reject) => {
+    const t   = Math.floor(Date.now() / 1000);
+    const sep = path.includes('?') ? '&' : '?';
+    const fullUrl = ;
+    const parsed = url_mod.parse(fullUrl);
+    const options = {
+      hostname: parsed.hostname,
+      path:     parsed.path,
+      method:   'GET',
+      headers:  { Accept: 'application/json' }
+    };
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => resolve({ status: res.statusCode, body: data }));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
@@ -17,15 +42,10 @@ exports.handler = async (event) => {
     return { statusCode: 403, headers: cors(), body: JSON.stringify({ error: 'Forbidden' }) };
   }
 
-  const t   = Math.floor(Date.now() / 1000);
-  const sep = path.includes('?') ? '&' : '?';
-  const url = ;
-
   try {
-    const res  = await fetch(url, { headers: { Accept: 'application/json' } });
-    const body = await res.text();
+    const { status, body } = await amFetch(path);
     return {
-      statusCode: res.status,
+      statusCode: status,
       headers: { ...cors(), 'Content-Type': 'application/json' },
       body
     };
