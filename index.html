@@ -64,7 +64,7 @@ body{background:#f2f2f0;color:#111;font-family:-apple-system,BlinkMacSystemFont,
 .search-input::placeholder{color:#bbb}
 .table-wrap{overflow-x:auto;border:1px solid #e0e0e0;border-radius:10px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.04)}
 table{width:100%;border-collapse:collapse;min-width:800px}
-thead th{background:#fafafa;padding:10px 14px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#999;white-space:nowrap;border-bottom:1px solid #efefef;user-select:none}
+thead th{background:#f5f5f3;padding:10px 14px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#666;white-space:nowrap;border-bottom:2px solid #ddd;user-select:none;position:sticky;top:204px;z-index:50;box-shadow:0 2px 4px rgba(0,0,0,.06)}
 thead th.sortable{cursor:pointer}
 thead th.sortable:hover{color:#111}
 thead th .sort-arrow{margin-left:4px;font-size:9px}
@@ -486,8 +486,20 @@ function buildColumns() {
 
 // ── Render header ────────────────────────────────────────────────────────────
 function renderHeader() {
-  // Top-level thead removed — column headers appear per-collection instead
-  document.getElementById('table-head').innerHTML = '';
+  const thead = document.getElementById('table-head');
+  thead.innerHTML = '';
+  const cols = buildColumns();
+  const tr = document.createElement('tr');
+  cols.forEach(col => {
+    const th = document.createElement('th');
+    th.textContent = col.label;
+    if (['total','grandTotal','onlineOrders','availSell','onlineOnOrder'].includes(col.key) || col.key.startsWith('size_')) {
+      th.style.textAlign = 'right';
+    }
+    if (['cancel','onlineOrders'].includes(col.key)) th.style.textAlign = 'center';
+    tr.appendChild(th);
+  });
+  thead.appendChild(tr);
 }
 
 // ── Render body ──────────────────────────────────────────────────────────────
