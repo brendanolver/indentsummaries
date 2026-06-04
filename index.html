@@ -473,13 +473,13 @@ function buildColumns() {
   if (sizesVisible) {
     cols.push({ key: 'sizes', label: 'Sizes', sortable: false });
   }
-  if (!totalsOnly) cols.push({ key: 'total',        label: 'Indent Orders',  sortable: true });
-  if (!totalsOnly) cols.push({ key: 'onlineOrders', label: 'Online Order',  sortable: false });
-  if (!totalsOnly) cols.push({ key: 'monthDel',     label: 'Month Del',    sortable: false });
+  if (!totalsOnly) cols.push({ key: 'total',          label: 'Indent Orders',         sortable: true  });
+  if (amStockLoaded)            cols.push({ key: 'availSell',     label: 'Avail to Sell (All WH)', sortable: true  });
+  if (onlineStoreOrdersLoaded)  cols.push({ key: 'onlineOnOrder', label: 'Online On Order',        sortable: true  });
+  if (!totalsOnly) cols.push({ key: 'onlineOrders',  label: 'Online Order',          sortable: false });
+  if (!totalsOnly) cols.push({ key: 'monthDel',      label: 'Month Del',             sortable: false });
   cols.push({ key: 'grandTotal',   label: 'Grand Total',    sortable: true });
-  if (onlineStoreOrdersLoaded) cols.push({ key: 'onlineOnOrder', label: 'Online On Order', sortable: true });
-  if (amStockLoaded) cols.push({ key: 'availSell', label: 'Avail to Sell (All WH)', sortable: true });
-  cols.push({ key: 'cancel',        label: 'Cancel',         sortable: false });
+  cols.push({ key: 'cancel',       label: 'Cancel',         sortable: false });
   return cols;
 }
 
@@ -627,10 +627,41 @@ function renderTable() {
         tr.appendChild(tdSz);
       }
 
-      // Indent Orders + Online Orders (hidden when totalsOnly)
+      // Indent Orders (hidden when totalsOnly)
       if (!totalsOnly) {
         addTd(tr, isCancelled ? '0' : rowTotal.toLocaleString(), 'total-col');
+      }
 
+      // Avail to Sell (All WH) — sits right after Indent Orders
+      if (amStockLoaded) {
+        const av = amStock[row.style];
+        const tdAv = document.createElement('td');
+        if (av === null) {
+          tdAv.className = 'avail-sell-col avail-none'; tdAv.textContent = '—';
+        } else if (av === undefined) {
+          tdAv.className = 'avail-sell-col avail-loading'; tdAv.textContent = '…';
+        } else {
+          tdAv.className = 'avail-sell-col'; tdAv.textContent = Math.round(av).toLocaleString();
+        }
+        tr.appendChild(tdAv);
+      }
+
+      // Online On Order (WNDRR ONLINE STORE open sales orders)
+      if (onlineStoreOrdersLoaded) {
+        const oo2 = onlineStoreOrders[row.style];
+        const tdOO2 = document.createElement('td');
+        if (oo2 === undefined) {
+          tdOO2.className = 'online-on-order-col avail-loading'; tdOO2.textContent = '…';
+        } else if (!oo2) {
+          tdOO2.className = 'online-on-order-col avail-none'; tdOO2.textContent = '—';
+        } else {
+          tdOO2.className = 'online-on-order-col'; tdOO2.textContent = Math.round(oo2).toLocaleString();
+        }
+        tr.appendChild(tdOO2);
+      }
+
+      // Online Order input + Month Del (hidden when totalsOnly)
+      if (!totalsOnly) {
         const tdOO = document.createElement('td');
         tdOO.className = 'online-orders-col';
         const inp = document.createElement('input');
@@ -669,37 +700,6 @@ function renderTable() {
         });
         tdMD.appendChild(mdInp);
         tr.appendChild(tdMD);
-      }
-
-      // Grand Total
-      addTd(tr, isCancelled ? '0' : grand.toLocaleString(), 'grand-total-col');
-
-      // Online On Order (WNDRR ONLINE STORE open sales orders)
-      if (onlineStoreOrdersLoaded) {
-        const oo = onlineStoreOrders[row.style];
-        const tdOO2 = document.createElement('td');
-        if (oo === undefined) {
-          tdOO2.className = 'online-on-order-col avail-loading'; tdOO2.textContent = '…';
-        } else if (!oo) {
-          tdOO2.className = 'online-on-order-col avail-none'; tdOO2.textContent = '—';
-        } else {
-          tdOO2.className = 'online-on-order-col'; tdOO2.textContent = Math.round(oo).toLocaleString();
-        }
-        tr.appendChild(tdOO2);
-      }
-
-      // Avail to Sell (All WH) (AM stock)
-      if (amStockLoaded) {
-        const av = amStock[row.style];
-        const tdAv = document.createElement('td');
-        if (av === null) {
-          tdAv.className = 'avail-sell-col avail-none'; tdAv.textContent = '—';
-        } else if (av === undefined) {
-          tdAv.className = 'avail-sell-col avail-loading'; tdAv.textContent = '…';
-        } else {
-          tdAv.className = 'avail-sell-col'; tdAv.textContent = Math.round(av).toLocaleString();
-        }
-        tr.appendChild(tdAv);
       }
 
       // Cancel checkbox
