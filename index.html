@@ -278,7 +278,7 @@ const COLLECTION_PRIORITY = ['ACCESSORIES CURRENT','2026 - AA CORE STYLES'];
 
 let pivotRows = [];
 let sizeColumns = [];
-let sortState = {};
+let sortState = { col: null, dir: 'asc' }; // global sort
 let onlineOrders = {};
 let monthDel = {};
 let cancelled = {};       // { styleKey: true/false }
@@ -410,7 +410,7 @@ function parseCSV(text) {
     return a.style.localeCompare(b.style);
   });
 
-  sortState = {};
+  sortState = { col: null, dir: 'asc' };
   filterCollections = new Set();
   filterCategories = new Set();
   filterMonthDel = new Set();
@@ -492,11 +492,18 @@ function renderHeader() {
   const tr = document.createElement('tr');
   cols.forEach(col => {
     const th = document.createElement('th');
-    th.textContent = col.label;
-    if (['total','grandTotal','onlineOrders','availSell','onlineOnOrder'].includes(col.key) || col.key.startsWith('size_')) {
-      th.style.textAlign = 'right';
-    }
+    th.dataset.key = col.key;
+    if (['total','grandTotal','availSell','onlineOnOrder'].includes(col.key) || col.key.startsWith('size_')) th.style.textAlign = 'right';
     if (['cancel','onlineOrders'].includes(col.key)) th.style.textAlign = 'center';
+    if (col.sortable) {
+      th.classList.add('sortable');
+      th.appendChild(document.createTextNode(col.label));
+      const arrow = document.createElement('span'); arrow.className = 'sort-arrow'; th.appendChild(arrow);
+      th.addEventListener('click', () => handleSort(col.key));
+      if (sortState.col === col.key) th.classList.add(sortState.dir === 'asc' ? 'sort-asc' : 'sort-desc');
+    } else {
+      th.textContent = col.label;
+    }
     tr.appendChild(th);
   });
   thead.appendChild(tr);
@@ -504,6 +511,7 @@ function renderHeader() {
 
 // ── Render body ──────────────────────────────────────────────────────────────
 function renderTable() {
+  renderHeader(); // keep sticky header in sync with current column state
   const tbody = document.getElementById('table-body');
   tbody.innerHTML = '';
 
@@ -548,13 +556,12 @@ function renderTable() {
 
   collections.forEach(coll => {
     let group = collMap[coll];
-    const st = sortState[coll];
-    if (st) {
+    if (sortState.col) {
       group = [...group].sort((a, b) => {
-        let va = getVal(a, st.col), vb = getVal(b, st.col);
+        let va = getVal(a, sortState.col), vb = getVal(b, sortState.col);
         if (typeof va === 'string') { va = va.toLowerCase(); vb = vb.toLowerCase(); }
         const cmp = va < vb ? -1 : va > vb ? 1 : 0;
-        return st.dir === 'desc' ? -cmp : cmp;
+        return sortState.dir === 'desc' ? -cmp : cmp;
       });
     }
 
@@ -566,31 +573,6 @@ function renderTable() {
     htd.textContent = coll;
     htr.appendChild(htd);
     tbody.appendChild(htr);
-
-    // ── Column sub-header (per-collection sort) ──
-    const chtr = document.createElement('tr');
-    chtr.className = 'coll-col-header';
-    chtr.dataset.coll = coll;
-    buildColumns().forEach(col => {
-      const th = document.createElement('th');
-      th.dataset.key = col.key;
-      if (['total','grandTotal','onlineOrders'].includes(col.key) || col.key.startsWith('size_') || col.key === 'sizes') th.classList.add('num');
-      if (col.sortable) {
-        th.classList.add('sortable');
-        const arrow = document.createElement('span');
-        arrow.className = 'sort-arrow';
-        th.appendChild(document.createTextNode(col.label));
-        th.appendChild(arrow);
-        th.addEventListener('click', () => handleSortForColl(coll, col.key));
-      } else {
-        th.textContent = col.label;
-      }
-      // Apply current sort indicator for this collection
-      const st = sortState[coll];
-      if (st && st.col === col.key) th.classList.add(st.dir === 'asc' ? 'sort-asc' : 'sort-desc');
-      chtr.appendChild(th);
-    });
-    tbody.appendChild(chtr);
 
     let collTotal = 0, collOO = 0;
 
@@ -789,7 +771,7 @@ function updateCollSubtotal(tbody, coll) {
   if (!str) return;
   let t = 0, oo = 0;
   let el = str.previousElementSibling;
-  while (el && !el.classList.contains('coll-col-header')) {
+  while (el && !el.classList.contains('collection-header')) {
     if (!el.classList.contains('coll-subtotal') && !el.classList.contains('coll-spacer') && !el.classList.contains('collection-header')) {
       const tc  = el.querySelector('.total-col');
       const inp = el.querySelector('input[type=number].oo-input');
@@ -983,17 +965,12 @@ function getVal(row, colKey) {
 }
 
 // ── Sorting ──────────────────────────────────────────────────────────────────
-function handleSortForColl(coll, colKey) {
-  const cur = sortState[coll];
-  sortState[coll] = { col: colKey, dir: (cur && cur.col === colKey && cur.dir === 'asc') ? 'desc' : 'asc' };
+function handleSort(colKey) {
+  sortState = { col: colKey, dir: (sortState.col === colKey && sortState.dir === 'asc') ? 'desc' : 'asc' };
   renderTable();
 }
 
-function handleSort(colKey) { handleSortForColl(colKey, colKey); } // legacy fallback
-
-function updateSortIndicators() {
-  // Sort indicators are applied inline when building coll-col-header rows
-}
+function updateSortIndicators() { /* handled inside renderHeader() */ }
 
 // ── Summary ──────────────────────────────────────────────────────────────────
 function updateSummary(rows, units, grand) {
