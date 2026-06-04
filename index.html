@@ -1401,50 +1401,60 @@ function exportPDF() {
   const { jsPDF } = window.jspdf;
   const ML = 10, MR = 10, PW = 297, PH = 210;
   const TW = PW - ML - MR;
+  const LOGO_W = 52; // dark logo panel width
   const dateStr = new Date().toLocaleDateString('en-AU', {day:'2-digit', month:'short', year:'numeric'});
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
-  // Grab the logo from the DOM (the same PNG already loaded in the header)
+  // Grab the logo src directly from the app header img element
   const logoEl  = document.querySelector('.wordmark img');
   const logoSrc = logoEl ? logoEl.src : null;
 
   function drawPageHeader() {
-    // Light warm-gray header background
-    doc.setFillColor(245, 245, 243);
-    doc.rect(ML, 6, TW, 22, 'F');
+    const HDR_H = 22, HDR_Y = 6;
 
-    // Logo image — draw if available (PNG: dark logo on transparent, shows black on light bg)
+    // Left dark panel — logo sits here (white PNG visible on dark bg)
+    doc.setFillColor(28, 28, 28);
+    doc.rect(ML, HDR_Y, LOGO_W, HDR_H, 'F');
+
+    // Right light panel
+    doc.setFillColor(248, 248, 246);
+    doc.rect(ML + LOGO_W, HDR_Y, TW - LOGO_W, HDR_H, 'F');
+
+    // Logo image — white PNG on dark panel
     if (logoSrc) {
-      try { doc.addImage(logoSrc, 'PNG', ML + 3, 9, 34, 14); } catch(e) {}
-    } else {
-      // Fallback: text wordmark
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(18);
-      doc.setTextColor(20, 20, 20);
-      doc.text('WNDRR', ML + 4, 21);
+      try {
+        doc.addImage(logoSrc, 'PNG', ML + 3, HDR_Y + 3, LOGO_W - 6, HDR_H - 6);
+      } catch(e) {
+        // fallback text if image fails
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
+        doc.setTextColor(255, 255, 255);
+        doc.text('WNDRR', ML + 5, HDR_Y + 14);
+      }
     }
 
-    // Vertical separator
-    doc.setDrawColor(190, 190, 188);
-    doc.setLineWidth(0.5);
-    doc.line(ML + 42, 10, ML + 42, 26);
+    // Thin separator between panels
+    doc.setDrawColor(80, 80, 80);
+    doc.setLineWidth(0.3);
+    doc.line(ML + LOGO_W, HDR_Y, ML + LOGO_W, HDR_Y + HDR_H);
 
-    // Title text — dark charcoal, not black
+    // Title text on right panel
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(50, 50, 50);
-    doc.text('INDENT ORDER SUMMARY', ML + 46, 16);
+    doc.setFontSize(8.5);
+    doc.setTextColor(30, 30, 30);
+    doc.text('INDENT ORDER SUMMARY', ML + LOGO_W + 5, HDR_Y + 9);
+
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(6.5);
-    doc.setTextColor(120, 120, 120);
-    doc.text('Need to Buy Report', ML + 46, 22);
+    doc.setTextColor(110, 110, 110);
+    doc.text('Need to Buy Report', ML + LOGO_W + 5, HDR_Y + 16);
 
     // Date right-aligned
-    doc.text(dateStr, PW - MR - 3, 22, { align: 'right' });
+    doc.text(dateStr, PW - MR - 3, HDR_Y + 16, { align: 'right' });
 
     // Bottom rule
     doc.setDrawColor(200, 200, 198);
-    doc.setLineWidth(0.4);
-    doc.line(ML, 29, PW - MR, 29);
+    doc.setLineWidth(0.3);
+    doc.line(ML, HDR_Y + HDR_H, PW - MR, HDR_Y + HDR_H);
 
     doc.setTextColor(0, 0, 0);
   }
@@ -1470,7 +1480,7 @@ function exportPDF() {
   collections.forEach(coll => {
     body.push([{ content: coll, colSpan: hdrs.length, styles: {
       fillColor: [55, 55, 55], textColor: [255,255,255], fontStyle: 'bold',
-      fontSize: 7.5, cellPadding: { top: 4, bottom: 4, left: 5, right: 5 }
+      fontSize: 7.5, cellPadding: { top: 3.5, bottom: 3.5, left: 5, right: 5 }
     }}]);
     bodyMeta.push({ type: 'coll' });
 
@@ -1513,51 +1523,42 @@ function exportPDF() {
     bodyMeta.push({ type: 'subtotal' });
   });
 
-  // Column widths summing to TW (277mm) — wider category to avoid truncation
   const colStyles = {
-    0: { cellWidth: 26, font: 'courier', fontSize: 7 }, // Style (monospace)
-    1: { cellWidth: 70 },                                // Description
-    2: { cellWidth: 28 },                                // Colour
-    3: { cellWidth: 32 },                                // Category (wider — prevents ACCESSORIE truncation)
+    0: { cellWidth: 26, font: 'courier', fontSize: 7 },
+    1: { cellWidth: 70 },
+    2: { cellWidth: 28 },
+    3: { cellWidth: 32 },
   };
   let ci = 4;
   activeSizes.forEach(() => { colStyles[ci] = { cellWidth: 9, halign: 'center' }; ci++; });
   if (!totalsOnly) {
-    colStyles[ci]   = { cellWidth: 18, halign: 'right' }; ci++; // Indent Orders
-    colStyles[ci]   = { cellWidth: 15, halign: 'right' }; ci++; // Online Order
-    colStyles[ci]   = { cellWidth: 14 };                   ci++; // Month Del
+    colStyles[ci]   = { cellWidth: 18, halign: 'right' }; ci++;
+    colStyles[ci]   = { cellWidth: 15, halign: 'right' }; ci++;
+    colStyles[ci]   = { cellWidth: 14 };                   ci++;
   }
   if (onlineStoreOrdersLoaded) { colStyles[ci] = { cellWidth: 19, halign: 'right' }; ci++; }
   if (amStockLoaded)           { colStyles[ci] = { cellWidth: 18, halign: 'right' }; ci++; }
-  colStyles[grandI] = { cellWidth: 20, halign: 'right' }; // Grand Total
+  colStyles[grandI] = { cellWidth: 20, halign: 'right' };
 
   doc.autoTable({
-    startY: 33,
+    startY: 32,
     head:   [hdrs],
     body,
     theme:  'plain',
     styles: {
       fontSize: 7.5,
       cellPadding: { top: 2.5, bottom: 2.5, left: 3, right: 3 },
-      overflow:    'hidden',
-      font:        'helvetica',
-      textColor:   [40, 40, 40],
-      lineColor:   [220, 220, 218],
-      lineWidth:   0.15,
+      overflow: 'hidden', font: 'helvetica', textColor: [40,40,40],
+      lineColor: [218,218,216], lineWidth: 0.15,
     },
     headStyles: {
-      fillColor:   [45, 45, 45],       // Dark charcoal — not pure black
-      textColor:   [255, 255, 255],
-      fontStyle:   'bold',
-      fontSize:    7,
-      cellPadding: { top: 4, bottom: 4, left: 3, right: 3 },
-      lineWidth:   0,
-      overflow:    'linebreak',        // Allow 2-line headers to prevent truncation
-      minCellHeight: 10,
+      fillColor: [45,45,45], textColor: [255,255,255], fontStyle: 'bold',
+      fontSize: 7, cellPadding: { top: 4, bottom: 4, left: 3, right: 3 },
+      lineWidth: 0, overflow: 'linebreak', minCellHeight: 10,
     },
     columnStyles: colStyles,
-    margin:      { left: ML, right: MR, top: 33 },
-    tableWidth:  TW,
+    margin: { left: ML, right: MR, top: 32 },
+    tableWidth: TW,
     didParseCell: function(data) {
       if (data.section === 'head') {
         if (data.column.index >= 4) data.cell.styles.halign = 'right';
@@ -1567,21 +1568,17 @@ function exportPDF() {
       const meta = bodyMeta[data.row.index];
       if (!meta || meta.type === 'coll') return;
       const isGrand = data.column.index === grandI;
-
       if (meta.isCancelled) {
         data.cell.styles.fillColor = [255, 232, 232];
         data.cell.styles.textColor = [185, 30, 30];
         data.cell.styles.fontStyle = 'italic';
       } else if (meta.type === 'subtotal') {
-        // Slightly darker shade for subtotal — full width
-        data.cell.styles.fillColor = isGrand ? [215, 215, 213] : [232, 232, 230];
+        data.cell.styles.fillColor = isGrand ? [215,215,213] : [232,232,230];
         data.cell.styles.fontStyle = 'bold';
-        data.cell.styles.textColor = [20, 20, 20];
+        data.cell.styles.textColor = [20,20,20];
       } else {
-        // Alternating rows — full width, same shade across all columns
-        const rowFill = meta.even ? [245, 245, 243] : [255, 255, 255];
-        data.cell.styles.fillColor = rowFill;
-        // Grand Total column: same alternating fill but always bold
+        // Full-width alternating rows
+        data.cell.styles.fillColor = meta.even ? [245,245,243] : [255,255,255];
         if (isGrand) data.cell.styles.fontStyle = 'bold';
       }
     },
