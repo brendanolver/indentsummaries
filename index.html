@@ -161,6 +161,9 @@ tr.coll-spacer td{height:20px;background:#f2f2f0;border:none;padding:0}
     <button class="btn" id="toggle-month-btn" style="display:none" onclick="toggleMonthTotals()">Month Totals</button>
     <button class="btn" id="fetch-am-btn" style="display:none" onclick="fetchAMStock()">↻ Refresh Stock</button>
     <span class="fetch-progress" id="fetch-progress"></span>
+    <input type="file" id="restore-input" accept=".json" style="display:none">
+    <button class="btn" id="save-backup-btn" style="display:none" onclick="saveBackup()">Save Backup</button>
+    <button class="btn" onclick="document.getElementById('restore-input').click()">Restore Backup</button>
     <button class="btn" id="export-xlsx-btn" disabled onclick="exportXLSX()">Export Excel</button>
     <button class="btn btn-primary" id="export-pdf-btn" disabled onclick="exportPDF()">Export PDF</button>
   </div>
@@ -302,6 +305,7 @@ const uploadZone = document.getElementById('upload-zone');
 uploadZone.addEventListener('click', () => document.getElementById('file-input').click());
 document.getElementById('file-input').addEventListener('change', e => handleFile(e.target.files[0]));
 document.getElementById('replace-input').addEventListener('change', e => handleFile(e.target.files[0]));
+document.getElementById('restore-input').addEventListener('change', function() { if (this.files[0]) restoreBackup(this.files[0]); this.value = ''; });
 uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
 uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
 uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('drag-over'); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
@@ -1016,6 +1020,7 @@ function showApp() {
   document.getElementById('export-xlsx-btn').disabled    = false;
   document.getElementById('export-pdf-btn').disabled     = false;
   document.getElementById('fetch-am-btn').style.display  = 'inline-flex';
+  document.getElementById('save-backup-btn').style.display = 'inline-flex';
 }
 
 function showError(msg) { const el = document.getElementById('error-banner'); el.textContent = msg; el.style.display = 'block'; }
@@ -1645,6 +1650,60 @@ function exportPDF() {
   }
 
   doc.save('WNDRR_Order_Analysis.pdf');
+}
+
+// ── Backup / Restore ──────────────────────────────────────────────────────────
+function saveBackup() {
+  const label = prompt('Enter a label for this backup (e.g. "SS26 Range Review"):', '');
+  if (label === null) return;
+  const backup = {
+    version: 1,
+    label: label.trim() || 'Backup',
+    savedAt: new Date().toISOString(),
+    pivotRows,
+    sizeColumns,
+    onlineOrders,
+    cancelled,
+    monthDel
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const date = new Date().toISOString().slice(0,10);
+  const safe = backup.label.replace(/[^a-z0-9]/gi, '_');
+  a.download = 'WNDRR_backup_' + date + '_' + safe + '.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function restoreBackup(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    let backup;
+    try { backup = JSON.parse(e.target.result); } catch { alert('Invalid backup file.'); return; }
+    if (!backup.pivotRows || !backup.version) { alert('This does not look like a valid WNDRR backup file.'); return; }
+    const info = backup.label + '\nSaved: ' + new Date(backup.savedAt).toLocaleString();
+    if (!confirm('Restore backup?\n\n' + info + '\n\nThis will replace the current data.')) return;
+    pivotRows    = backup.pivotRows    || [];
+    sizeColumns  = backup.sizeColumns  || [];
+    onlineOrders = backup.onlineOrders || {};
+    cancelled    = backup.cancelled    || {};
+    monthDel     = backup.monthDel     || {};
+    amStock = {};
+    amStockLoaded = false;
+    onlineStoreOrders = {};
+    onlineStoreOrdersLoaded = false;
+    filterCollections = new Set([...new Set(pivotRows.map(r => r.collection))]);
+    filterCategories  = new Set([...new Set(pivotRows.map(r => r.category))]);
+    buildDropdown('coll', [...filterCollections].sort((a,b) => collRank(a)-collRank(b) || a.localeCompare(b)));
+    buildDropdown('cat',  [...filterCategories].sort());
+    rebuildMonthDropdown();
+    showApp();
+    renderHeader();
+    renderTable();
+    updateSummary();
+  };
+  reader.readAsText(file);
 }
 
 </script>
