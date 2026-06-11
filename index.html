@@ -1485,6 +1485,7 @@ function exportPDF() {
   if (onlineStoreOrdersLoaded) hdrs.push('Online On Order');
   if (amStockLoaded)           hdrs.push('Avail Sell');
   hdrs.push('Grand Total');
+  hdrs.push('Comments');
 
   const body     = [];
   const bodyMeta = [];
@@ -1519,6 +1520,7 @@ function exportPDF() {
         dataRow.push(isCancelled ? '—' : (v == null ? '—' : Math.round(v).toLocaleString()));
       }
       dataRow.push(grand ? grand.toLocaleString() : '—');
+      dataRow.push(comments[row.style] || '');
       body.push(dataRow);
       bodyMeta.push({ type: 'data', even: rowIdx % 2 === 1, isCancelled });
       rowIdx++;
@@ -1552,6 +1554,7 @@ function exportPDF() {
   if (onlineStoreOrdersLoaded) { colStyles[ci] = { cellWidth: 19, halign: 'right' }; ci++; }
   if (amStockLoaded)           { colStyles[ci] = { cellWidth: 18, halign: 'right' }; ci++; }
   colStyles[grandI] = { cellWidth: 20, halign: 'right' };
+  colStyles[grandI + 1] = { cellWidth: 45 };
 
   doc.autoTable({
     startY: 32,
