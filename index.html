@@ -90,7 +90,7 @@ tr.data-row.cancelled td.grand-total-col{background:#ffe0e0 !important;color:#cc
 tr.data-row.cancelled .total-col,tr.data-row.cancelled .grand-total-col{color:#cc3333}
 .cancel-chk{width:16px;height:16px;cursor:pointer;accent-color:#cc3333}
 thead th[data-key="cancel"],tr.coll-col-header th[data-key="cancel"]{text-align:center}thead th[data-key="onlineOrders"],tr.coll-col-header th[data-key="onlineOrders"]{text-align:center}
-.oo-input{background:#fff;border:1.5px solid #e0e0e0;border-radius:5px;color:#111;font-size:12px;font-variant-numeric:tabular-nums;padding:4px 8px;text-align:center;width:80px;outline:none;transition:border-color .15s,box-shadow .15s}.md-input{text-align:left;width:90px;font-variant-numeric:normal}.comment-input{text-align:left;width:180px;font-variant-numeric:normal}
+.oo-input{background:#fff;border:1.5px solid #e0e0e0;border-radius:5px;color:#111;font-size:12px;font-variant-numeric:tabular-nums;padding:4px 8px;text-align:center;width:80px;outline:none;transition:border-color .15s,box-shadow .15s}.md-input{text-align:left;width:90px;font-variant-numeric:normal}.comment-input{text-align:left;width:180px;font-variant-numeric:normal;font-size:10px;resize:none;height:36px;line-height:1.35;padding:4px 8px;overflow:hidden}
 .oo-input:focus{border-color:#111;box-shadow:0 0 0 3px rgba(0,0,0,.07)}
 .oo-input::placeholder{color:#ddd}
 tr.collection-header td{background:#111;color:#fff;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.8px;padding:10px 14px;border-top:3px solid #111}
@@ -738,8 +738,7 @@ function renderTable() {
       // Comments
       const tdComment = document.createElement('td');
       tdComment.className = 'comment-col';
-      const cmtInp = document.createElement('input');
-      cmtInp.type = 'text';
+      const cmtInp = document.createElement('textarea');
       cmtInp.className = 'oo-input comment-input';
       cmtInp.placeholder = 'Add comment…';
       cmtInp.value = comments[row.style] || '';
