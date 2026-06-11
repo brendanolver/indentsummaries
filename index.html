@@ -90,7 +90,7 @@ tr.data-row.cancelled td.grand-total-col{background:#ffe0e0 !important;color:#cc
 tr.data-row.cancelled .total-col,tr.data-row.cancelled .grand-total-col{color:#cc3333}
 .cancel-chk{width:16px;height:16px;cursor:pointer;accent-color:#cc3333}
 thead th[data-key="cancel"],tr.coll-col-header th[data-key="cancel"]{text-align:center}thead th[data-key="onlineOrders"],tr.coll-col-header th[data-key="onlineOrders"]{text-align:center}
-.oo-input{background:#fff;border:1.5px solid #e0e0e0;border-radius:5px;color:#111;font-size:12px;font-variant-numeric:tabular-nums;padding:4px 8px;text-align:center;width:80px;outline:none;transition:border-color .15s,box-shadow .15s}.md-input{text-align:left;width:90px;font-variant-numeric:normal}
+.oo-input{background:#fff;border:1.5px solid #e0e0e0;border-radius:5px;color:#111;font-size:12px;font-variant-numeric:tabular-nums;padding:4px 8px;text-align:center;width:80px;outline:none;transition:border-color .15s,box-shadow .15s}.md-input{text-align:left;width:90px;font-variant-numeric:normal}.comment-input{text-align:left;width:180px;font-variant-numeric:normal}
 .oo-input:focus{border-color:#111;box-shadow:0 0 0 3px rgba(0,0,0,.07)}
 .oo-input::placeholder{color:#ddd}
 tr.collection-header td{background:#111;color:#fff;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.8px;padding:10px 14px;border-top:3px solid #111}
@@ -286,6 +286,7 @@ let sortState = { col: null, dir: 'asc' }; // global sort
 let onlineOrders = {};
 let monthDel = {};
 let cancelled = {};       // { styleKey: true/false }
+let comments  = {};       // { styleKey: string }
 let filterCancelled = ''; // '' | 'yes' | 'no'
 let monthTotalsVisible = false;
 let amStock = {};              // { styleKey: number | null }
@@ -486,6 +487,7 @@ function buildColumns() {
   if (!totalsOnly) cols.push({ key: 'monthDel',      label: 'Month Del',             sortable: false });
   cols.push({ key: 'grandTotal',   label: 'Grand Total',    sortable: true });
   cols.push({ key: 'cancel',       label: 'Cancel',         sortable: false });
+  cols.push({ key: 'comments',     label: 'Comments',       sortable: false });
   return cols;
 }
 
@@ -535,7 +537,7 @@ function renderTable() {
   if (filterCancelled === 'yes') rows = rows.filter(r => !!cancelled[r.style]);
   if (filterCancelled === 'no')  rows = rows.filter(r => !cancelled[r.style]);
 
-  const colSpanCount = 4 + (sizesVisible ? 1 : 0) + (totalsOnly ? 1 : 4) + (onlineStoreOrdersLoaded ? 1 : 0) + (amStockLoaded ? 1 : 0) + 1; // +1 for cancel
+  const colSpanCount = 4 + (sizesVisible ? 1 : 0) + (totalsOnly ? 1 : 4) + (onlineStoreOrdersLoaded ? 1 : 0) + (amStockLoaded ? 1 : 0) + 2; // +1 cancel +1 comments
 
   if (rows.length === 0) {
     const tr = document.createElement('tr');
@@ -733,6 +735,19 @@ function renderTable() {
       tr.appendChild(tdCancel);
       if (cancelled[row.style]) tr.classList.add('cancelled');
 
+      // Comments
+      const tdComment = document.createElement('td');
+      tdComment.className = 'comment-col';
+      const cmtInp = document.createElement('input');
+      cmtInp.type = 'text';
+      cmtInp.className = 'oo-input comment-input';
+      cmtInp.placeholder = 'Add comment…';
+      cmtInp.value = comments[row.style] || '';
+      cmtInp.dataset.style = row.style;
+      cmtInp.addEventListener('input', function() { comments[this.dataset.style] = this.value; });
+      tdComment.appendChild(cmtInp);
+      tr.appendChild(tdComment);
+
       tbody.appendChild(tr);
     });
 
@@ -756,6 +771,8 @@ function renderTable() {
       const stMD = document.createElement('td'); stMD.className = 'online-orders-col'; stMD.textContent = ''; str.appendChild(stMD);
     }
     const stGrand = document.createElement('td'); stGrand.className = 'grand-total-col subtotal-grand'; stGrand.textContent = (collTotal + collOO).toLocaleString(); str.appendChild(stGrand);
+    str.appendChild(document.createElement('td')); // cancel placeholder
+    str.appendChild(document.createElement('td')); // comments placeholder
     tbody.appendChild(str);
 
     // ── Spacer ──
@@ -1530,7 +1547,7 @@ function exportPDF() {
   if (!totalsOnly) {
     colStyles[ci]   = { cellWidth: 18, halign: 'right' }; ci++;
     colStyles[ci]   = { cellWidth: 15, halign: 'right' }; ci++;
-    colStyles[ci]   = { cellWidth: 14 };                   ci++;
+    colStyles[ci]   = { cellWidth: 22 };                   ci++;
   }
   if (onlineStoreOrdersLoaded) { colStyles[ci] = { cellWidth: 19, halign: 'right' }; ci++; }
   if (amStockLoaded)           { colStyles[ci] = { cellWidth: 18, halign: 'right' }; ci++; }
@@ -1664,7 +1681,8 @@ function saveBackup() {
     sizeColumns,
     onlineOrders,
     cancelled,
-    monthDel
+    monthDel,
+    comments
   };
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
@@ -1689,6 +1707,7 @@ function restoreBackup(file) {
     onlineOrders = backup.onlineOrders || {};
     cancelled    = backup.cancelled    || {};
     monthDel     = backup.monthDel     || {};
+    comments     = backup.comments     || {};
     amStock = {};
     amStockLoaded = false;
     onlineStoreOrders = {};
