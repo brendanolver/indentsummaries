@@ -123,6 +123,10 @@ tr.coll-subtotal td.grand-total-col{background:#ececea;color:#111;font-weight:80
 .month-totals-wrap tr.mt-subtotal td{background:#ececea !important;font-weight:700;color:#111;font-size:11px}
 .month-totals-wrap tr.mt-subtotal td.mt-grand{background:#dededc !important}
 td.avail-sell-col{font-weight:700;color:#1a7a3a;text-align:right;font-variant-numeric:tabular-nums;background:#f2faf5 !important}
+tr.data-row.am-only td{background:#f5f0ff !important}
+tr.data-row.am-only:hover td{background:#ede5ff !important}
+tr.data-row.am-only td.grand-total-col{background:#ede5ff !important}
+tr.data-row.am-only.cancelled td{background:#fff0f0 !important}
 tbody tr.data-row:hover td.avail-sell-col{background:#e6f5ec !important}
 tr.data-row.cancelled td.avail-sell-col{color:#cc3333 !important;background:#fff0f0 !important}
 td.avail-sell-col.avail-none{color:#bbb;font-weight:400}
@@ -160,6 +164,7 @@ tr.coll-spacer td{height:20px;background:#f2f2f0;border:none;padding:0}
     <button class="btn" id="toggle-totals-btn" style="display:none" onclick="toggleTotals()">Grand Total Only</button>
     <button class="btn" id="toggle-month-btn" style="display:none" onclick="toggleMonthTotals()">Month Totals</button>
     <button class="btn" id="fetch-am-btn" style="display:none" onclick="fetchAMStock()">↻ Refresh Stock</button>
+    <button class="btn" id="load-am-products-btn" style="display:none" onclick="loadAMProducts()">↓ Load All AM Products</button>
     <span class="fetch-progress" id="fetch-progress"></span>
     <input type="file" id="restore-input" accept=".json" style="display:none">
     <button class="btn" id="save-backup-btn" style="display:none" onclick="saveBackup()">Save Backup</button>
@@ -595,7 +600,7 @@ function renderTable() {
       collOO   += isCancelled ? 0 : oo;
 
       const tr = document.createElement('tr');
-      tr.className = 'data-row';
+      tr.className = 'data-row' + (row.fromAM ? ' am-only' : '');
       tr.dataset.indent = rowTotal;
       tr.dataset.coll = coll;
 
@@ -1037,6 +1042,7 @@ function showApp() {
   document.getElementById('export-pdf-btn').disabled     = false;
   document.getElementById('fetch-am-btn').style.display  = 'inline-flex';
   document.getElementById('save-backup-btn').style.display = 'inline-flex';
+  document.getElementById('load-am-products-btn').style.display = 'inline-flex';
 }
 
 function showError(msg) { const el = document.getElementById('error-banner'); el.textContent = msg; el.style.display = 'block'; }
@@ -1670,6 +1676,83 @@ function exportPDF() {
 
   doc.save('WNDRR_Order_Analysis.pdf');
 }
+
+// ── Load All AM Products ─────────────────────────────────────────────────────
+async function fetchAMProductsForGroup(groupName) {
+  const results = [];
+  const path = 'products/?group=' + encodeURIComponent(groupName);
+  const res = await fetch(AM_FUNC + '?path=' + encodeURIComponent(path));
+  const data = await res.json();
+  results.push(...(data.response || []));
+  return results;
+}
+
+async function loadAMProducts() {
+  const btn  = document.getElementById('load-am-products-btn');
+  const prog = document.getElementById('fetch-progress');
+  btn.disabled = true;
+  btn.textContent = 'Loading…';
+  prog.classList.add('visible');
+
+  const collections = [...new Set(pivotRows.map(r => r.collection))];
+  const existingStyles = new Set(pivotRows.map(r => r.style));
+  let added = 0;
+  const newRows = [];
+
+  for (let ci = 0; ci < collections.length; ci++) {
+    const coll = collections[ci];
+    prog.textContent = 'Loading ' + (ci + 1) + '/' + collections.length + ': ' + coll;
+    try {
+      const products = await fetchAMProductsForGroup(coll);
+      products.forEach(p => {
+        const style = p.style_number || '';
+        if (!style || existingStyles.has(style)) return;
+        existingStyles.add(style);
+        // Build sizes from size_range_info (just the size labels, no qty)
+        const sizes = {};
+        const sri = p.size_range_info || {};
+        Object.values(sri).forEach(sz => { if (sz) sizes[sz.toUpperCase()] = 0; });
+        newRows.push({
+          style,
+          desc: p.description || '',
+          colour: '',
+          collection: p.collection || coll,
+          category: p.category || '',
+          sizes,
+          fromAM: true
+        });
+        added++;
+      });
+    } catch(e) {
+      console.warn('Failed to fetch products for', coll, e);
+    }
+  }
+
+  if (newRows.length) {
+    // Merge new sizes into sizeColumns
+    newRows.forEach(r => Object.keys(r.sizes).forEach(sz => {
+      if (!sizeColumns.includes(sz) && SIZE_ORDER.includes(sz)) sizeColumns.push(sz);
+    }));
+    sizeColumns.sort((a, b) => SIZE_ORDER.indexOf(a) - SIZE_ORDER.indexOf(b));
+
+    pivotRows.push(...newRows);
+    pivotRows.sort((a, b) => {
+      const ca = collRank(a.collection), cb = collRank(b.collection);
+      if (ca !== cb) return ca - cb;
+      return a.style.localeCompare(b.style);
+    });
+    renderHeader();
+    renderTable();
+    updateSummaryLive();
+  }
+
+  prog.classList.remove('visible');
+  prog.textContent = '';
+  btn.disabled = false;
+  btn.textContent = added ? '✓ ' + added + ' AM Products Loaded' : '↓ Load All AM Products';
+  btn.classList.toggle('btn-active', added > 0);
+}
+
 
 // ── Backup / Restore ──────────────────────────────────────────────────────────
 function saveBackup() {
