@@ -1485,11 +1485,11 @@ function exportPDF() {
   if (onlineStoreOrdersLoaded) hdrs.push('Online On Order');
   if (amStockLoaded)           hdrs.push('Avail Sell');
   hdrs.push('Grand Total');
+  const grandI   = hdrs.length - 1;
   hdrs.push('Comments');
 
   const body     = [];
   const bodyMeta = [];
-  const grandI   = hdrs.length - 1;
 
   collections.forEach(coll => {
     body.push([{ content: coll, colSpan: hdrs.length, styles: {
@@ -1553,8 +1553,8 @@ function exportPDF() {
   }
   if (onlineStoreOrdersLoaded) { colStyles[ci] = { cellWidth: 19, halign: 'right' }; ci++; }
   if (amStockLoaded)           { colStyles[ci] = { cellWidth: 18, halign: 'right' }; ci++; }
-  colStyles[grandI] = { cellWidth: 20, halign: 'right' };
-  colStyles[grandI + 1] = { cellWidth: 45 };
+  colStyles[grandI] = { cellWidth: 16, halign: 'right' };
+  colStyles[grandI + 1] = { cellWidth: 50, fontSize: 6.5, overflow: 'linebreak' };
 
   doc.autoTable({
     startY: 32,
