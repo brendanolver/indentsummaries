@@ -1744,6 +1744,21 @@ async function loadAMProducts() {
     renderHeader();
     renderTable();
     updateSummaryLive();
+
+    // Fetch stock & online orders for the newly added styles
+    const newStyles = newRows.map(r => r.style);
+    if (amStockLoaded || onlineStoreOrdersLoaded) {
+      prog.textContent = 'Fetching stock for new styles…';
+      const ordersPromise = onlineStoreOrdersLoaded ? fetchOnlineStoreOrders() : Promise.resolve();
+      const BATCH = 5;
+      for (let i = 0; i < newStyles.length; i += BATCH) {
+        await Promise.all(newStyles.slice(i, i + BATCH).map(s => fetchStyleStock(s)));
+        prog.textContent = 'Stock ' + Math.min(i + BATCH, newStyles.length) + '/' + newStyles.length;
+        renderTable();
+      }
+      await ordersPromise;
+      renderTable();
+    }
   }
 
   prog.classList.remove('visible');
