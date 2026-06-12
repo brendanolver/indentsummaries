@@ -1544,22 +1544,22 @@ function exportPDF() {
   });
 
   const colStyles = {
-    0: { cellWidth: 26, font: 'courier', fontSize: 7 },
-    1: { cellWidth: 70 },
-    2: { cellWidth: 28 },
-    3: { cellWidth: 32 },
+    0: { cellWidth: 24, font: 'courier', fontSize: 7 },
+    1: { cellWidth: 42 },
+    2: { cellWidth: 22 },
+    3: { cellWidth: 24 },
   };
   let ci = 4;
   activeSizes.forEach(() => { colStyles[ci] = { cellWidth: 9, halign: 'center' }; ci++; });
   if (!totalsOnly) {
     colStyles[ci]   = { cellWidth: 18, halign: 'right' }; ci++;
     colStyles[ci]   = { cellWidth: 15, halign: 'right' }; ci++;
-    colStyles[ci]   = { cellWidth: 22 };                   ci++;
+    colStyles[ci]   = { cellWidth: 16 };                   ci++;
   }
-  if (onlineStoreOrdersLoaded) { colStyles[ci] = { cellWidth: 19, halign: 'right' }; ci++; }
-  if (amStockLoaded)           { colStyles[ci] = { cellWidth: 18, halign: 'right' }; ci++; }
+  if (onlineStoreOrdersLoaded) { colStyles[ci] = { cellWidth: 18, halign: 'right' }; ci++; }
+  if (amStockLoaded)           { colStyles[ci] = { cellWidth: 17, halign: 'right' }; ci++; }
   colStyles[grandI] = { cellWidth: 16, halign: 'right' };
-  colStyles[grandI + 1] = { cellWidth: 50, fontSize: 6.5, overflow: 'linebreak' };
+  colStyles[grandI + 1] = { cellWidth: 70, fontSize: 7, overflow: 'linebreak', cellPadding: { top: 2.5, bottom: 2.5, left: 3, right: 3 } };
 
   doc.autoTable({
     startY: 32,
