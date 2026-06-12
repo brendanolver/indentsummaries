@@ -1715,7 +1715,7 @@ async function loadAMProducts() {
         newRows.push({
           style,
           desc: p.description || '',
-          colour: '',
+          colour: (() => { const w = p.web_title || ''; const d = p.description || ''; return w.startsWith(d + ' - ') ? w.slice(d.length + 3).trim() : ''; })(),
           collection: p.collection || coll,
           category: p.category || '',
           sizes,
