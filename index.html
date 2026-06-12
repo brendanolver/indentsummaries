@@ -90,7 +90,7 @@ tr.data-row.cancelled td.grand-total-col{background:#ffe0e0 !important;color:#cc
 tr.data-row.cancelled .total-col,tr.data-row.cancelled .grand-total-col{color:#cc3333}
 .cancel-chk{width:16px;height:16px;cursor:pointer;accent-color:#cc3333}
 thead th[data-key="cancel"],tr.coll-col-header th[data-key="cancel"]{text-align:center}thead th[data-key="onlineOrders"],tr.coll-col-header th[data-key="onlineOrders"]{text-align:center}
-.oo-input{background:#fff;border:1.5px solid #e0e0e0;border-radius:5px;color:#111;font-size:12px;font-variant-numeric:tabular-nums;padding:4px 8px;text-align:center;width:80px;outline:none;transition:border-color .15s,box-shadow .15s}.md-input{text-align:left;width:90px;font-variant-numeric:normal}.comment-input{text-align:left;width:180px;font-variant-numeric:normal;font-size:10px;resize:none;height:36px;line-height:1.35;padding:4px 8px;overflow:hidden}
+.oo-input{background:#fff;border:1.5px solid #e0e0e0;border-radius:5px;color:#111;font-size:13px;font-variant-numeric:tabular-nums;padding:6px 10px;text-align:center;width:90px;outline:none;transition:border-color .15s,box-shadow .15s;cursor:text}.md-input{text-align:left;width:100px;font-variant-numeric:normal}.comment-input{text-align:left;width:180px;font-variant-numeric:normal;font-size:10px;resize:none;height:36px;line-height:1.35;padding:4px 8px;overflow:hidden}
 .oo-input:focus{border-color:#111;box-shadow:0 0 0 3px rgba(0,0,0,.07)}
 .oo-input::placeholder{color:#ddd}
 tr.collection-header td{background:#111;color:#fff;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.8px;padding:10px 14px;border-top:3px solid #111}
@@ -678,6 +678,8 @@ function renderTable() {
         inp.placeholder = '0';
         inp.value = onlineOrders[row.style] !== undefined ? onlineOrders[row.style] : '';
         inp.dataset.style = row.style;
+        inp.addEventListener('focus', function() { this.select(); });
+        inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); const next = this.closest('tr').querySelector('.md-input'); if (next) next.focus(); } });
         inp.addEventListener('input', function () {
           const val = parseInt(this.value, 10) || 0;
           onlineOrders[this.dataset.style] = val;
@@ -700,6 +702,19 @@ function renderTable() {
         mdInp.placeholder = 'e.g. Mar';
         mdInp.value = monthDel[row.style] || '';
         mdInp.dataset.style = row.style;
+        mdInp.addEventListener('focus', function() { this.select(); });
+        mdInp.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            const rows = [...document.querySelectorAll('tr.data-row:not(.cancelled)')];
+            const myRow = this.closest('tr');
+            const idx = rows.indexOf(myRow);
+            if (idx !== -1 && rows[idx + 1]) {
+              const nextOO = rows[idx + 1].querySelector('input[type=number].oo-input');
+              if (nextOO) nextOO.focus();
+            }
+          }
+        });
         mdInp.addEventListener('input', function () {
           monthDel[this.dataset.style] = this.value;
           rebuildMonthDropdown();
@@ -1582,6 +1597,8 @@ function exportPDF() {
     tableWidth: TW,
     didParseCell: function(data) {
       if (data.section === 'head') {
+        const commentsI = grandI + 1;
+        if (data.column.index === commentsI) { data.cell.styles.halign = 'center'; return; }
         if (data.column.index >= 4) data.cell.styles.halign = 'right';
         return;
       }
