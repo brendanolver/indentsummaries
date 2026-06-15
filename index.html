@@ -1506,8 +1506,8 @@ function exportPDF() {
   if (amStockLoaded)           hdrs.push('Avail Sell');
   hdrs.push('Grand Total');
   const grandI   = hdrs.length - 1;
-  hdrs.push('Cancelled');
   hdrs.push('Comments');
+  hdrs.push('Cancelled');
 
   const body     = [];
   const bodyMeta = [];
@@ -1541,8 +1541,8 @@ function exportPDF() {
         dataRow.push(isCancelled ? '—' : (v == null ? '—' : Math.round(v).toLocaleString()));
       }
       dataRow.push(grand ? grand.toLocaleString() : '—');
-      dataRow.push(isCancelled ? '✕ CANCELLED' : '');
       dataRow.push(comments[row.style] || '');
+      dataRow.push(isCancelled ? '☑' : '☐');
       body.push(dataRow);
       bodyMeta.push({ type: 'data', even: rowIdx % 2 === 1, isCancelled });
       rowIdx++;
@@ -1576,8 +1576,8 @@ function exportPDF() {
   if (onlineStoreOrdersLoaded) { colStyles[ci] = { cellWidth: 18, halign: 'right' }; ci++; }
   if (amStockLoaded)           { colStyles[ci] = { cellWidth: 17, halign: 'right' }; ci++; }
   colStyles[grandI] = { cellWidth: 16, halign: 'right' };
-  colStyles[grandI + 1] = { cellWidth: 20, halign: 'center', fontSize: 7, fontStyle: 'bold' };
-  colStyles[grandI + 2] = { cellWidth: 57, fontSize: 7, overflow: 'linebreak', cellPadding: { top: 2.5, bottom: 2.5, left: 3, right: 3 } };
+  colStyles[grandI + 1] = { cellWidth: 57, fontSize: 7, overflow: 'linebreak', cellPadding: { top: 2.5, bottom: 2.5, left: 3, right: 3 } };
+  colStyles[grandI + 2] = { cellWidth: 12, halign: 'center', fontSize: 10 };
 
   doc.autoTable({
     startY: 32,
@@ -1600,9 +1600,10 @@ function exportPDF() {
     tableWidth: TW,
     didParseCell: function(data) {
       if (data.section === 'head') {
-        const cancelI   = grandI + 1;
-        const commentsI = grandI + 2;
-        if (data.column.index === cancelI || data.column.index === commentsI) { data.cell.styles.halign = 'center'; return; }
+        const commentsI = grandI + 1;
+        const cancelI   = grandI + 2;
+        if (data.column.index === commentsI) { data.cell.styles.halign = 'center'; return; }
+        if (data.column.index === cancelI)   { data.cell.styles.halign = 'center'; return; }
         if (data.column.index >= 4) data.cell.styles.halign = 'right';
         return;
       }
