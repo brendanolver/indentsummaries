@@ -1507,7 +1507,7 @@ function exportPDF() {
   hdrs.push('Grand Total');
   const grandI   = hdrs.length - 1;
   hdrs.push('Comments');
-  hdrs.push('Cancelled');
+  hdrs.push('Cancel');
 
   const body     = [];
   const bodyMeta = [];
@@ -1542,7 +1542,7 @@ function exportPDF() {
       }
       dataRow.push(grand ? grand.toLocaleString() : '—');
       dataRow.push(comments[row.style] || '');
-      dataRow.push(isCancelled ? '☑' : '☐');
+      dataRow.push(isCancelled ? '__CHECKED__' : '__UNCHECKED__');
       body.push(dataRow);
       bodyMeta.push({ type: 'data', even: rowIdx % 2 === 1, isCancelled });
       rowIdx++;
@@ -1603,7 +1603,7 @@ function exportPDF() {
         const commentsI = grandI + 1;
         const cancelI   = grandI + 2;
         if (data.column.index === commentsI) { data.cell.styles.halign = 'center'; return; }
-        if (data.column.index === cancelI)   { data.cell.styles.halign = 'center'; return; }
+        if (data.column.index === cancelI)   { data.cell.styles.halign = 'center'; data.cell.styles.textColor = [255,255,255]; return; }
         if (data.column.index >= 4) data.cell.styles.halign = 'right';
         return;
       }
@@ -1611,6 +1611,8 @@ function exportPDF() {
       const meta = bodyMeta[data.row.index];
       if (!meta || meta.type === 'coll') return;
       const isGrand = data.column.index === grandI;
+      const cancelI2 = grandI + 2;
+      if (data.column.index === cancelI2) { data.cell.text = ['']; }
       if (meta.isCancelled) {
         data.cell.styles.fillColor = [255,232,232];
         data.cell.styles.textColor = [185,30,30];
@@ -1622,6 +1624,25 @@ function exportPDF() {
       } else {
         data.cell.styles.fillColor = meta.even ? [245,245,243] : [255,255,255];
         if (isGrand) data.cell.styles.fontStyle = 'bold';
+      }
+    },
+    didDrawCell: function(data) {
+      if (data.section !== 'body') return;
+      const cancelI = grandI + 2;
+      if (data.column.index !== cancelI) return;
+      const raw = data.cell.raw;
+      if (raw !== '__CHECKED__' && raw !== '__UNCHECKED__') return;
+      const checked = raw === '__CHECKED__';
+      const x = data.cell.x + (data.cell.width - 4) / 2;
+      const y = data.cell.y + (data.cell.height - 4) / 2;
+      doc.setDrawColor(80, 80, 80);
+      doc.setLineWidth(0.4);
+      doc.rect(x, y, 4, 4);
+      if (checked) {
+        doc.setDrawColor(30, 30, 30);
+        doc.setLineWidth(0.7);
+        doc.line(x + 0.6, y + 2, x + 1.6, y + 3.2);
+        doc.line(x + 1.6, y + 3.2, x + 3.4, y + 0.8);
       }
     },
     didDrawPage: function(data) {
