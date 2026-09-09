@@ -72,11 +72,13 @@ async function pullIndentSummary({ collections, sellDate }) {
           collection: meta.collection,
           category: meta.category,
           sizes: {},
+          accounts: new Set(),
         };
       }
       const colour = item.attr_2 || meta.colour;
       if (colour) pivotMap[style].colours.add(colour);
       pivotMap[style].sizes[size] = (pivotMap[style].sizes[size] || 0) + units;
+      if (order.customer_id) pivotMap[style].accounts.add(order.customer_id);
       sizesFound.add(size);
     });
   });
@@ -91,6 +93,7 @@ async function pullIndentSummary({ collections, sellDate }) {
     collection: r.collection,
     category: r.category,
     sizes: r.sizes,
+    accounts: r.accounts.size,
   }));
 
   return { pivotRows, sizeColumns };

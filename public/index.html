@@ -591,6 +591,7 @@ function buildColumns() {
     cols.push({ key: 'sizes', label: 'Sizes', sortable: false });
   }
   if (!totalsOnly) cols.push({ key: 'total',          label: 'Indent Orders',         sortable: true  });
+  if (!totalsOnly) cols.push({ key: 'accounts',       label: 'Accts Purchased',       sortable: true  });
   if (amStockLoaded)            cols.push({ key: 'availSell',     label: 'Avail to Sell (Online Store WH)', sortable: true  });
   if (onlineStoreOrdersLoaded)  cols.push({ key: 'onlineOnOrder', label: 'Online On Order',        sortable: true  });
   if (!totalsOnly) cols.push({ key: 'onlineOrders',  label: 'Online Order',          sortable: false });
@@ -610,7 +611,7 @@ function renderHeader() {
   cols.forEach(col => {
     const th = document.createElement('th');
     th.dataset.key = col.key;
-    if (['total','grandTotal','availSell','onlineOnOrder'].includes(col.key) || col.key.startsWith('size_')) th.style.textAlign = 'right';
+    if (['total','accounts','grandTotal','availSell','onlineOnOrder'].includes(col.key) || col.key.startsWith('size_')) th.style.textAlign = 'right';
     if (['cancel','onlineOrders'].includes(col.key)) th.style.textAlign = 'center';
     if (col.sortable) {
       th.classList.add('sortable');
@@ -647,7 +648,7 @@ function renderTable() {
   if (filterCancelled === 'yes') rows = rows.filter(r => !!cancelled[r.style]);
   if (filterCancelled === 'no')  rows = rows.filter(r => !cancelled[r.style]);
 
-  const colSpanCount = 4 + (sizesVisible ? 1 : 0) + (totalsOnly ? 1 : 4) + (onlineStoreOrdersLoaded ? 1 : 0) + (amStockLoaded ? 1 : 0) + 2; // +1 cancel +1 comments
+  const colSpanCount = 4 + (sizesVisible ? 1 : 0) + (totalsOnly ? 1 : 5) + (onlineStoreOrdersLoaded ? 1 : 0) + (amStockLoaded ? 1 : 0) + 2; // total+accounts+onlineOrders+monthDel+grandTotal, +1 cancel +1 comments
 
   if (rows.length === 0) {
     const tr = document.createElement('tr');
@@ -742,6 +743,11 @@ function renderTable() {
       // Indent Orders (hidden when totalsOnly)
       if (!totalsOnly) {
         addTd(tr, isCancelled ? '0' : rowTotal.toLocaleString(), 'total-col');
+      }
+
+      // Accts Purchased — distinct wholesale accounts that ordered this style (AM-pull only)
+      if (!totalsOnly) {
+        addTd(tr, row.accounts != null ? row.accounts.toLocaleString() : '—', 'num');
       }
 
       // Avail to Sell (Online Store WH) — sits right after Indent Orders
@@ -1105,6 +1111,7 @@ function getVal(row, colKey) {
   if (colKey === 'colour')   return row.colour;
   if (colKey === 'category') return row.category;
   if (colKey === 'total')  return sizeColumns.reduce((s, sz) => s + (row.sizes[sz] || 0), 0);
+  if (colKey === 'accounts') return row.accounts != null ? row.accounts : 0;
   if (colKey === 'grandTotal') return sizeColumns.reduce((s, sz) => s + (row.sizes[sz] || 0), 0) + (onlineOrders[row.style] || 0);
   if (colKey.startsWith('size_')) return row.sizes[colKey.slice(5)] || 0;
   return 0;
