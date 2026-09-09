@@ -1,7 +1,7 @@
 'use strict';
 const express = require('express');
 const { amGetAllPages } = require('../lib/amClient');
-const { pullIndentSummary } = require('../lib/indentPull');
+const { pullIndentSummary, pullPOSummary } = require('../lib/indentPull');
 
 const router = express.Router();
 
@@ -26,6 +26,16 @@ router.post('/am/pull', async (req, res) => {
   try {
     const { collections, sellDate } = req.body || {};
     const result = await pullIndentSummary({ collections, sellDate });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/am/po-summary', async (req, res) => {
+  try {
+    const { collections, sellDate } = req.body || {};
+    const result = await pullPOSummary({ collections, sellDate });
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });

@@ -197,6 +197,7 @@ tr.coll-spacer td{height:20px;background:#f2f2f0;border:none;padding:0}
       <div class="dropdown-panel" id="dd-export-panel">
         <button type="button" class="dd-item" id="export-xlsx-btn" disabled onclick="exportXLSX()">Export Excel</button>
         <button type="button" class="dd-item" id="export-pdf-btn" disabled onclick="exportPDF()">Export PDF</button>
+        <button type="button" class="dd-item" id="export-po-summary-btn" disabled onclick="exportPOSummaryPDF()">Export PO Summary (PDF)</button>
       </div>
     </div>
   </div>
@@ -371,6 +372,7 @@ document.getElementById('search-input').addEventListener('input', e => { searchQ
 // ── AM collection pull ───────────────────────────────────────────────────────
 let amCollectionsList = [];
 let pullCollections = new Set();
+let lastPullParams = null; // { collections, sellDate } — remembered so the PO Summary export can reuse the same scope
 
 async function loadPullCollections() {
   try {
@@ -429,6 +431,7 @@ async function pullFromAM() {
     if (!data.pivotRows || !data.pivotRows.length) { showError('No matching indent orders found for that selection.'); return; }
     pivotRows = data.pivotRows;
     sizeColumns = data.sizeColumns;
+    lastPullParams = { collections: [...pullCollections], sellDate };
     finalizeLoad();
   } catch (e) {
     showError('Pull failed: ' + e.message);
@@ -1197,6 +1200,7 @@ function showApp() {
   rebuildMonthDropdown();
   document.getElementById('export-xlsx-btn').disabled    = false;
   document.getElementById('export-pdf-btn').disabled     = false;
+  document.getElementById('export-po-summary-btn').disabled = !lastPullParams;
   document.getElementById('save-session-btn').style.display = 'inline-flex';
 }
 
@@ -1862,6 +1866,139 @@ function exportPDF() {
   doc.save('WNDRR_Order_Analysis.pdf');
 }
 
+// ── PO Summary export — open orders that already have a PO raised, consolidated
+// by style (the mirror image of the Indent Order Summary above), no collection
+// grouping. Reuses whatever collections/sell date the current pull used.
+async function exportPOSummaryPDF() {
+  if (!lastPullParams) {
+    alert('Pull from ApparelMagic first (PO Summary reuses that same collection/date selection).');
+    return;
+  }
+  const btn = document.getElementById('export-po-summary-btn');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch('/api/am/po-summary', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(lastPullParams)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to build PO Summary');
+    if (!data.pivotRows || !data.pivotRows.length) { alert('No open orders with a PO already raised were found for this selection.'); return; }
+    renderPOSummaryPDF(data.pivotRows, data.sizeColumns);
+  } catch (e) {
+    alert('Could not build PO Summary: ' + e.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function renderPOSummaryPDF(rows, sizeCols) {
+  const { jsPDF } = window.jspdf;
+  const ML = 10, MR = 10, PW = 297;
+  const TW = PW - ML - MR;
+  const dateStr = new Date().toLocaleDateString('en-AU', {day:'2-digit', month:'short', year:'numeric'});
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+  const logoEl  = document.querySelector('.wordmark img');
+  const logoSrc = logoEl ? logoEl.src : null;
+
+  function drawPageHeader() {
+    const HDR_H = 22, HDR_Y = 6;
+    doc.setFillColor(255, 255, 255);
+    doc.rect(ML, HDR_Y, TW, HDR_H, 'F');
+
+    const logoH = 14;
+    let logoW = 42;
+    if (logoEl && logoEl.naturalWidth && logoEl.naturalHeight) {
+      logoW = Math.round(logoH * (logoEl.naturalWidth / logoEl.naturalHeight));
+    }
+    const logoY = HDR_Y + (HDR_H - logoH) / 2;
+    if (logoSrc) {
+      try { doc.addImage(logoSrc, 'PNG', ML + 2, logoY, logoW, logoH); }
+      catch(e) {
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(18);
+        doc.setTextColor(17, 17, 17);
+        doc.text('WNDRR', ML + 3, HDR_Y + 14);
+      }
+    }
+
+    const sepX = ML + logoW + 6;
+    doc.setDrawColor(200, 200, 198);
+    doc.setLineWidth(0.4);
+    doc.line(sepX, HDR_Y + 4, sepX, HDR_Y + HDR_H - 4);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(25, 25, 25);
+    doc.text('PO SUMMARY', sepX + 5, HDR_Y + 9);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(120, 120, 120);
+    doc.text('Open Orders — All POs Consolidated', sepX + 5, HDR_Y + 16);
+
+    doc.text(dateStr, PW - MR - 3, HDR_Y + 16, { align: 'right' });
+
+    doc.setDrawColor(210, 210, 208);
+    doc.setLineWidth(0.3);
+    doc.line(ML, HDR_Y + HDR_H, PW - MR, HDR_Y + HDR_H);
+    doc.setTextColor(0, 0, 0);
+  }
+
+  drawPageHeader();
+
+  const sorted = [...rows].sort((a, b) => a.style.localeCompare(b.style));
+  const hdrs = ['Style', 'Description', 'Colour', ...sizeCols, 'Total'];
+  const totalI = hdrs.length - 1;
+
+  const body = [];
+  let grandTotal = 0;
+  sorted.forEach(row => {
+    const total = sizeCols.reduce((s, sz) => s + (row.sizes[sz] || 0), 0);
+    grandTotal += total;
+    body.push([
+      row.style, row.desc, row.colour,
+      ...sizeCols.map(sz => row.sizes[sz] || ''),
+      total.toLocaleString()
+    ]);
+  });
+  body.push([{ content: 'GRAND TOTAL', colSpan: totalI, styles: { halign: 'right', fontStyle: 'bold' } },
+             { content: grandTotal.toLocaleString(), styles: { fontStyle: 'bold' } }]);
+
+  const colStyles = { 0: { cellWidth: 22 }, 1: { cellWidth: 50 }, 2: { cellWidth: 26 } };
+  sizeCols.forEach((sz, i) => { colStyles[3 + i] = { cellWidth: 'auto', halign: 'right' }; });
+  colStyles[totalI] = { cellWidth: 16, halign: 'right' };
+
+  doc.autoTable({
+    startY: 32,
+    head: [hdrs],
+    body,
+    theme: 'plain',
+    styles: {
+      fontSize: 7.5, cellPadding: { top: 2.5, bottom: 2.5, left: 3, right: 3 },
+      overflow: 'hidden', font: 'helvetica', textColor: [40,40,40],
+      lineColor: [218,218,216], lineWidth: 0.15,
+    },
+    headStyles: {
+      fillColor: [45,45,45], textColor: [255,255,255], fontStyle: 'bold',
+      fontSize: 7, cellPadding: { top: 4, bottom: 4, left: 3, right: 3 }, lineWidth: 0,
+    },
+    columnStyles: colStyles,
+    margin: { left: ML, right: MR, top: 32 },
+    tableWidth: TW,
+    didParseCell: function(data) {
+      if (data.section === 'head' && data.column.index >= 3) data.cell.styles.halign = 'right';
+      if (data.section === 'body' && data.row.index % 2 === 1 && data.row.index !== body.length - 1) {
+        data.cell.styles.fillColor = [247,247,245];
+      }
+    },
+    didDrawPage: drawPageHeader,
+  });
+
+  doc.save('WNDRR_PO_Summary.pdf');
+}
+
 // ── Load All AM Products ─────────────────────────────────────────────────────
 async function fetchAMProductsForGroup(groupName) {
   const results = [];
@@ -1965,7 +2102,8 @@ function buildBackupObject(label) {
     onlineOrders,
     cancelled,
     monthDel,
-    comments
+    comments,
+    lastPullParams
   };
 }
 
@@ -2035,6 +2173,7 @@ function applyBackupObject(backup) {
   cancelled    = backup.cancelled    || {};
   monthDel     = backup.monthDel     || {};
   comments     = backup.comments     || {};
+  lastPullParams = backup.lastPullParams || null;
   amStock = {};
   amStockLoaded = false;
   onlineStoreOrders = {};
