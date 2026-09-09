@@ -47,6 +47,7 @@ body{background:#f2f2f0;color:#111;font-family:-apple-system,BlinkMacSystemFont,
 .dropdown-btn .dd-arrow{font-size:9px;opacity:.5;transition:transform .2s}
 .dropdown-btn.open .dd-arrow{transform:rotate(180deg)}
 .dropdown-panel{display:none;position:absolute;top:calc(100% + 6px);left:0;background:#fff;border:1px solid #ddd;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:220px;max-height:320px;overflow-y:auto;z-index:999;padding:6px 0}
+.header-actions .dropdown-wrap:last-child .dropdown-panel{left:auto;right:0}
 .dropdown-panel.open{display:block}
 .dd-search{padding:8px 12px;border-bottom:1px solid #f0f0f0;margin-bottom:4px}
 .dd-search input{width:100%;padding:5px 8px;border:1px solid #e0e0e0;border-radius:6px;font-size:11px;outline:none;color:#111}
@@ -1200,7 +1201,7 @@ function showApp() {
   rebuildMonthDropdown();
   document.getElementById('export-xlsx-btn').disabled    = false;
   document.getElementById('export-pdf-btn').disabled     = false;
-  document.getElementById('export-po-summary-btn').disabled = !lastPullParams;
+  document.getElementById('export-po-summary-btn').disabled = false;
   document.getElementById('save-session-btn').style.display = 'inline-flex';
 }
 
@@ -1870,9 +1871,15 @@ function exportPDF() {
 // by style (the mirror image of the Indent Order Summary above), no collection
 // grouping. Reuses whatever collections/sell date the current pull used.
 async function exportPOSummaryPDF() {
-  if (!lastPullParams) {
-    alert('Pull from ApparelMagic first (PO Summary reuses that same collection/date selection).');
-    return;
+  let params = lastPullParams;
+  if (!params) {
+    // Data loaded a different way (CSV, or a session/archive saved before this feature
+    // existed) — recover collections from the loaded rows and just ask for the date.
+    if (!pivotRows.length) { alert('Load some data first (pull from ApparelMagic, or restore a summary).'); return; }
+    const collections = [...new Set(pivotRows.map(r => r.collection).filter(Boolean))];
+    const sellDate = prompt('This summary wasn\'t pulled with a recorded sell date.\n\nEnter the indent sell start date for PO Summary (YYYY-MM-DD):', '');
+    if (!sellDate) return;
+    params = { collections, sellDate };
   }
   const btn = document.getElementById('export-po-summary-btn');
   if (btn) btn.disabled = true;
@@ -1880,7 +1887,7 @@ async function exportPOSummaryPDF() {
     const res = await fetch('/api/am/po-summary', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(lastPullParams)
+      body: JSON.stringify(params)
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to build PO Summary');
