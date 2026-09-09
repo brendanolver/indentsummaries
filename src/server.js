@@ -6,6 +6,7 @@ const { runMigrations } = require('./db');
 const amProxyRoutes = require('./routes/amProxy');
 const amRoutes = require('./routes/am');
 const archivesRoutes = require('./routes/archives');
+const sessionRoutes = require('./routes/session');
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
@@ -13,6 +14,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use('/api', amProxyRoutes);
 app.use('/api', amRoutes);
 app.use('/api', archivesRoutes);
+app.use('/api', sessionRoutes);
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
