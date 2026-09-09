@@ -591,7 +591,7 @@ function buildColumns() {
     cols.push({ key: 'sizes', label: 'Sizes', sortable: false });
   }
   if (!totalsOnly) cols.push({ key: 'total',          label: 'Indent Orders',         sortable: true  });
-  if (amStockLoaded)            cols.push({ key: 'availSell',     label: 'Avail to Sell (All WH)', sortable: true  });
+  if (amStockLoaded)            cols.push({ key: 'availSell',     label: 'Avail to Sell (Online Store WH)', sortable: true  });
   if (onlineStoreOrdersLoaded)  cols.push({ key: 'onlineOnOrder', label: 'Online On Order',        sortable: true  });
   if (!totalsOnly) cols.push({ key: 'onlineOrders',  label: 'Online Order',          sortable: false });
   if (!totalsOnly) cols.push({ key: 'monthDel',      label: 'Month Del',             sortable: false });
@@ -744,7 +744,7 @@ function renderTable() {
         addTd(tr, isCancelled ? '0' : rowTotal.toLocaleString(), 'total-col');
       }
 
-      // Avail to Sell (All WH) — sits right after Indent Orders
+      // Avail to Sell (Online Store WH) — sits right after Indent Orders
       if (amStockLoaded) {
         const av = amStock[row.style];
         const tdAv = document.createElement('td');
@@ -1169,13 +1169,15 @@ function showError(msg) { const el = document.getElementById('error-banner'); el
 function hideError()    { document.getElementById('error-banner').style.display = 'none'; }
 
 // ── Apparel Magic Stock Lookup ───────────────────────────────────────────────
+const ONLINE_STORE_WAREHOUSE_ID = '1002'; // "Shopify Online Store" in AM's warehouses list
+
 async function fetchStyleStock(style) {
   try {
     const prodRes  = await fetch(`${AM_FUNC}?path=${encodeURIComponent('products?style_number=' + style)}`);
     const prodData = await prodRes.json();
     if (!prodData.response || !prodData.response.length) { amStock[style] = null; return; }
     const productId = prodData.response[0].product_id;
-    const invRes    = await fetch(`${AM_FUNC}?path=${encodeURIComponent('inventory?product_id=' + productId)}`);
+    const invRes    = await fetch(`${AM_FUNC}?path=${encodeURIComponent('sku_warehouse?product_id=' + productId + '&warehouse_id=' + ONLINE_STORE_WAREHOUSE_ID)}`);
     const invData   = await invRes.json();
     amStock[style]  = (invData.response || []).reduce((s, r) => s + parseFloat(r.qty_avail_sell || 0), 0);
   } catch (e) {

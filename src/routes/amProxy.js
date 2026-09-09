@@ -2,7 +2,7 @@
 const express = require('express');
 const { AM_BASE } = require('../lib/amClient');
 
-const ALLOWED = ['products', 'inventory', 'orders', 'warehouses'];
+const ALLOWED = ['products', 'inventory', 'sku_warehouse', 'orders', 'warehouses'];
 
 const router = express.Router();
 
