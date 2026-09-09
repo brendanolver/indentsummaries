@@ -1,7 +1,11 @@
 'use strict';
 const { amGetAllPages } = require('./amClient');
 
-const QUICKFILL_WAREHOUSE_ID = '1002'; // "Shopify Online Store" in AM's warehouses list
+const ONLINE_STORE_CUSTOMER_ID = '1068'; // "WNDRR ONLINE STORE" — tracked separately in the Online Order column, excluded from indent totals
+
+function isQuickfillOrder(order) {
+  return /quickfill/i.test(order.customer_po || '') || /quickfill/i.test(order.department_number || '');
+}
 
 function colourFromWebTitle(product) {
   const w = product.web_title || '';
@@ -45,9 +49,9 @@ async function pullIndentSummary({ collections, sellDate }) {
 
   orders.forEach((order) => {
     if ((order.date_internal || '') < sellDate) return;
+    if (order.customer_id === ONLINE_STORE_CUSTOMER_ID) return; // WNDRR ONLINE STORE — tracked separately
+    if (isQuickfillOrder(order)) return;
     (order.order_items || []).forEach((item) => {
-      const warehouseId = item.warehouse_id || order.warehouse_id;
-      if (warehouseId === QUICKFILL_WAREHOUSE_ID) return; // Quickfill / online store
       if (item.purchase_order_id) return; // PO already raised against this line
 
       const style = item.style_number || '';
@@ -92,4 +96,4 @@ async function pullIndentSummary({ collections, sellDate }) {
   return { pivotRows, sizeColumns };
 }
 
-module.exports = { pullIndentSummary, QUICKFILL_WAREHOUSE_ID };
+module.exports = { pullIndentSummary, ONLINE_STORE_CUSTOMER_ID };
