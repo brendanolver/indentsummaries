@@ -1988,6 +1988,11 @@ async function openArchivesPanel() {
   if (isOpen) return;
   panel.classList.add('open');
   btn.classList.add('open');
+  await refreshArchivesPanel();
+}
+
+async function refreshArchivesPanel() {
+  const panel = document.getElementById('dd-archives-panel');
   panel.innerHTML = '<div class="dd-item" style="color:#999">Loading…</div>';
   try {
     const res = await fetch('/api/archives');
@@ -1998,9 +2003,17 @@ async function openArchivesPanel() {
     archives.forEach(a => {
       const item = document.createElement('div');
       item.className = 'dd-item';
-      item.style.cursor = 'pointer';
-      item.innerHTML = '<div><div>' + a.label + '</div><div style="font-size:10px;color:#999">' + new Date(a.created_at).toLocaleString() + '</div></div>';
-      item.addEventListener('click', () => loadArchive(a.id, a.label));
+      item.style.cssText = 'cursor:pointer;justify-content:space-between';
+      const info = document.createElement('div');
+      info.innerHTML = '<div>' + a.label + '</div><div style="font-size:10px;color:#999">' + new Date(a.created_at).toLocaleString() + '</div>';
+      info.addEventListener('click', () => loadArchive(a.id, a.label));
+      const del = document.createElement('span');
+      del.textContent = '✕';
+      del.title = 'Delete archive';
+      del.style.cssText = 'color:#ccc;padding:0 4px;cursor:pointer';
+      del.addEventListener('click', (ev) => { ev.stopPropagation(); deleteArchive(a.id, a.label); });
+      item.appendChild(info);
+      item.appendChild(del);
       panel.appendChild(item);
     });
   } catch (e) {
@@ -2019,6 +2032,17 @@ async function loadArchive(id, label) {
     document.querySelectorAll('.dropdown-btn').forEach(b => b.classList.remove('open'));
   } catch (e) {
     alert('Could not load archive: ' + e.message);
+  }
+}
+
+async function deleteArchive(id, label) {
+  if (!confirm('Delete archived summary "' + label + '"? This cannot be undone.')) return;
+  try {
+    const res = await fetch('/api/archives/' + id, { method: 'DELETE' });
+    if (!res.ok && res.status !== 204) throw new Error('Delete failed');
+    refreshArchivesPanel();
+  } catch (e) {
+    alert('Could not delete archive: ' + e.message);
   }
 }
 

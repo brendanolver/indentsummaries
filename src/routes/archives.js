@@ -41,4 +41,14 @@ router.post('/archives', async (req, res) => {
   }
 });
 
+router.delete('/archives/:id', async (req, res) => {
+  try {
+    const { rowCount } = await pool.query('DELETE FROM archives WHERE id = $1', [req.params.id]);
+    if (!rowCount) return res.status(404).json({ error: 'Not found' });
+    res.status(204).end();
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
