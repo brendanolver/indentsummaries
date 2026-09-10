@@ -119,16 +119,15 @@ async function pullIndentSummary({ collections, sellDate }) {
   });
 }
 
-// Mirror of pullIndentSummary: consolidates only the order-item lines that DO already
-// have a purchase order raised — i.e. what's already committed to production, as
-// opposed to what still needs a PO ("Need to Buy"). POs tend to be raised against
-// older orders than the indent's sell date filters for, so sellDate is optional here
-// (omit it to include every open order with a PO raised, regardless of order date).
+// All open Sales Order lines for the selected collections placed on/after sellDate
+// (if given), regardless of whether a Purchase Order has been individually raised
+// against the line in ApparelMagic — unlike pullIndentSummary, this isn't scoped to
+// "still needs a PO". sellDate is optional (omit it to include every open order).
 async function pullPOSummary({ collections, sellDate, excludeOrderIds }) {
   return pullOrderItems({
     collections,
     sellDate: sellDate || null,
-    includeItem: (item) => !!item.purchase_order_id,
+    includeItem: () => true,
     trackAccounts: false,
     excludeOnlineStore: false, // WNDRR ONLINE STORE units are real production commitments here
     excludeOrderIds,
