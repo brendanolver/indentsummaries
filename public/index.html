@@ -2408,8 +2408,7 @@ function applyBackupObject(backup) {
   rebuildMonthDropdown();
   showApp();
   renderHeader();
-  renderTable();
-  updateSummary();
+  renderTable(); // already calls updateSummary(rows, units, grand) internally
 }
 
 async function openArchivesPanel() {
