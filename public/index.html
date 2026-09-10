@@ -172,6 +172,12 @@ tr.coll-spacer td{height:20px;background:#f2f2f0;border:none;padding:0}
 .po-preview-grand span{font-variant-numeric:tabular-nums;margin-left:8px}
 .po-preview-actions{display:flex;gap:10px;flex-shrink:0}
 .po-preview-actions .btn{border-color:#444}
+.po-opt-body{padding:20px 22px;display:flex;flex-direction:column;gap:16px}
+.po-opt-field{display:flex;flex-direction:column;gap:6px}
+.po-opt-label{font-size:11px;font-weight:700;color:#111;text-transform:uppercase;letter-spacing:.4px}
+.po-opt-input{padding:8px 10px;border:1.5px solid #e0e0e0;border-radius:6px;font-size:13px;color:#111;outline:none;font-family:inherit;width:100%}
+.po-opt-input:focus{border-color:#111;box-shadow:0 0 0 3px rgba(0,0,0,.06)}
+.po-opt-hint{font-size:10.5px;color:#999;line-height:1.4}
 </style>
 </head>
 <body>
@@ -345,6 +351,40 @@ tr.coll-spacer td{height:20px;background:#f2f2f0;border:none;padding:0}
         <thead id="month-totals-head"></thead>
         <tbody id="month-totals-body"></tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+<div class="po-preview-overlay" id="po-options-overlay">
+  <div class="po-preview-card" style="max-width:460px">
+    <div class="po-preview-header">
+      <div>
+        <div class="po-preview-heading">PO Summary Options</div>
+        <div class="po-preview-sub">From ApparelMagic</div>
+      </div>
+      <button type="button" class="po-preview-close" onclick="closePOSummaryOptions()">&times;</button>
+    </div>
+    <div class="po-opt-body">
+      <label class="po-opt-field">
+        <span class="po-opt-label">Only include Sales Orders placed on/after</span>
+        <input type="date" id="po-opt-date" class="po-opt-input">
+        <span class="po-opt-hint">Leave blank to include every open order, regardless of date.</span>
+      </label>
+      <label class="po-opt-field">
+        <span class="po-opt-label">Sales Order numbers to exclude</span>
+        <input type="text" id="po-opt-exclude" class="po-opt-input" placeholder="e.g. 124389, 137693">
+      </label>
+      <label class="po-opt-field">
+        <span class="po-opt-label">Heading for the PDF</span>
+        <input type="text" id="po-opt-heading" class="po-opt-input" placeholder="e.g. SS2 2026 PO SUMMARY">
+      </label>
+    </div>
+    <div class="po-preview-footer">
+      <div></div>
+      <div class="po-preview-actions">
+        <button type="button" class="btn" onclick="closePOSummaryOptions()">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="submitPOSummaryOptions()">Build Report</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1927,14 +1967,17 @@ function exportPDF() {
   doc.save('WNDRR_Order_Analysis.pdf');
 }
 
-// ── PO Summary export — open orders that already have a PO raised, consolidated
-// by style (the mirror image of the Indent Order Summary above), no collection
-// grouping. Reuses whatever collections/sell date the current pull used.
+// ── PO Summary export — open Sales Order lines for the selected collections,
+// consolidated by style (the mirror image of the Indent Order Summary above), no
+// collection grouping. Reuses whatever collections the current pull used.
 // Unlike the Indent Summary, POs are typically raised against older orders than
 // whatever sell date the indent pull used — so this export asks for its own
-// (optional) date and its own order-number exclusions, rather than blindly
-// reusing lastPullParams.sellDate. Only collections are reused from the last pull.
-async function exportPOSummaryPDF() {
+// (optional) date and its own order-number exclusions via a small options form,
+// rather than blindly reusing lastPullParams.sellDate. Only collections are
+// reused from the last pull.
+let poSummaryCollections = null; // set by exportPOSummaryPDF, read by submitPOSummaryOptions
+
+function exportPOSummaryPDF() {
   let collections = lastPullParams && lastPullParams.collections;
   if (!collections) {
     // Data loaded a different way (CSV, or a session/archive saved before this feature
@@ -1942,25 +1985,25 @@ async function exportPOSummaryPDF() {
     if (!pivotRows.length) { alert('Load some data first (pull from ApparelMagic, or restore a summary).'); return; }
     collections = [...new Set(pivotRows.map(r => r.collection).filter(Boolean))];
   }
+  poSummaryCollections = collections;
 
-  const sellDateInput = prompt(
-    'Only include orders placed on/after this date (YYYY-MM-DD).\n\nLeave blank to include every open order with a PO already raised, regardless of order date — POs are usually raised against older orders, so this is normally left blank:',
-    lastPOSellDate
-  );
-  if (sellDateInput === null) return; // cancelled
-  lastPOSellDate = sellDateInput.trim();
+  document.getElementById('po-opt-date').value = lastPOSellDate;
+  document.getElementById('po-opt-exclude').value = lastPOExcludeOrders;
+  document.getElementById('po-opt-heading').value = lastPOHeading;
+  document.getElementById('po-options-overlay').classList.add('visible');
+}
 
-  const excludeInput = prompt(
-    'Sales Order numbers to exclude (comma-separated, e.g. 124389, 137693). Leave blank for none:',
-    lastPOExcludeOrders
-  );
-  if (excludeInput === null) return; // cancelled
-  lastPOExcludeOrders = excludeInput.trim();
+function closePOSummaryOptions() {
+  document.getElementById('po-options-overlay').classList.remove('visible');
+}
+
+async function submitPOSummaryOptions() {
+  lastPOSellDate = document.getElementById('po-opt-date').value; // native date input — already YYYY-MM-DD or ''
+  lastPOExcludeOrders = document.getElementById('po-opt-exclude').value.trim();
+  lastPOHeading = document.getElementById('po-opt-heading').value.trim() || 'PO SUMMARY';
   const excludeOrderIds = lastPOExcludeOrders ? lastPOExcludeOrders.split(',').map(s => s.trim()).filter(Boolean) : [];
 
-  const heading = prompt('Heading for the PO Summary PDF (e.g. "SS2 2026 PO SUMMARY"):', lastPOHeading || 'PO SUMMARY');
-  if (heading === null) return; // cancelled
-  lastPOHeading = heading.trim() || 'PO SUMMARY';
+  closePOSummaryOptions();
 
   const btn = document.getElementById('export-po-summary-btn');
   if (btn) btn.disabled = true;
@@ -1968,7 +2011,7 @@ async function exportPOSummaryPDF() {
     const res = await fetch('/api/am/po-summary', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ collections, sellDate: lastPOSellDate || undefined, excludeOrderIds })
+      body: JSON.stringify({ collections: poSummaryCollections, sellDate: lastPOSellDate || undefined, excludeOrderIds })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to build PO Summary');
