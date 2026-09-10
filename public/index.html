@@ -171,8 +171,7 @@ tr.coll-spacer td{height:20px;background:#f2f2f0;border:none;padding:0}
       <div class="dropdown-panel" id="dd-data-panel">
         <button type="button" class="dd-item" id="new-summary-btn" onclick="startNewSummary()">New Summary</button>
         <button type="button" class="dd-item" id="replace-btn" onclick="document.getElementById('replace-input').click()">Upload New CSV</button>
-        <button type="button" class="dd-item" id="load-am-products-btn" onclick="loadAMProducts()">↓ Load All AM Products</button>
-        <button type="button" class="dd-item" id="fetch-am-btn" onclick="fetchAMStock()">↻ Refresh Stock</button>
+        <button type="button" class="dd-item" id="fetch-am-btn" onclick="refreshAMData()">↻ Refresh AM Data</button>
       </div>
     </div>
     <span class="fetch-progress" id="fetch-progress"></span>
@@ -451,6 +450,7 @@ async function pullFromAM() {
     console.warn('Could not check for a saved session', e);
   }
   if (!resumed) loadPullCollections();
+  else refreshAMData();
 })();
 
 function handleFile(file) {
@@ -573,7 +573,7 @@ function finalizeLoad() {
   onlineStoreOrders = {};
   onlineStoreOrdersLoaded = false;
   const fetchBtn = document.getElementById('fetch-am-btn');
-  if (fetchBtn) { fetchBtn.textContent = '↻ Refresh Stock'; fetchBtn.classList.remove('fetching','btn-active'); }
+  if (fetchBtn) { fetchBtn.textContent = '↻ Refresh AM Data'; fetchBtn.classList.remove('fetching','btn-active'); }
   if (monthTotalsVisible) {
     monthTotalsVisible = false;
     document.getElementById('toggle-month-btn').textContent = 'Month Totals';
@@ -588,7 +588,7 @@ function finalizeLoad() {
   renderHeader();
   renderTable();
   showApp();
-  fetchAMStock();
+  refreshStockOnly();
 }
 
 function collRank(col) {
@@ -1244,14 +1244,10 @@ async function fetchOnlineStoreOrders() {
   onlineStoreOrdersLoaded = true;
 }
 
-async function fetchAMStock() {
-  const btn  = document.getElementById('fetch-am-btn');
-  const prog = document.getElementById('fetch-progress');
-  btn.classList.add('fetching');
-  btn.textContent = 'Fetching…';
-  prog.classList.add('visible');
-
-  // Fetch online store orders and AM stock in parallel
+// Fetches stock & online orders for every style currently in pivotRows.
+// Leaves button/progress-bar chrome to the caller so it can be reused
+// standalone (after a fresh AM pull) or as the second half of refreshAMData().
+async function refreshStock(prog) {
   onlineStoreOrders = {};
   onlineStoreOrdersLoaded = true;
   amStock = {};
@@ -1266,16 +1262,30 @@ async function fetchAMStock() {
   for (let i = 0; i < styles.length; i += BATCH) {
     const batch = styles.slice(i, i + BATCH);
     await Promise.all(batch.map(s => fetchStyleStock(s)));
-    prog.textContent = `${Math.min(i + BATCH, styles.length)} / ${styles.length}`;
+    if (prog) prog.textContent = `Stock ${Math.min(i + BATCH, styles.length)} / ${styles.length}`;
     renderTable();
   }
 
   await ordersPromise; // make sure orders are done too
+}
+
+// Stock-only refresh (no new-product pull), used after a fresh AM pull
+// where pivotRows already reflects the exact requested collections/sell date.
+async function refreshStockOnly() {
+  const btn  = document.getElementById('fetch-am-btn');
+  const prog = document.getElementById('fetch-progress');
+  if (btn) { btn.classList.add('fetching'); btn.textContent = 'Fetching…'; }
+  prog.classList.add('visible');
+
+  await refreshStock(prog);
+
   prog.classList.remove('visible');
   prog.textContent = '';
-  btn.classList.remove('fetching');
-  btn.textContent  = '↻ Refresh Stock';
-  btn.classList.add('btn-active');
+  if (btn) {
+    btn.classList.remove('fetching');
+    btn.textContent  = '↻ Refresh AM Data';
+    btn.classList.add('btn-active');
+  }
   renderTable();
 }
 
@@ -2006,7 +2016,7 @@ function renderPOSummaryPDF(rows, sizeCols) {
   doc.save('WNDRR_PO_Summary.pdf');
 }
 
-// ── Load All AM Products ─────────────────────────────────────────────────────
+// ── Load & refresh AM products/stock ──────────────────────────────────────────
 async function fetchAMProductsForGroup(groupName) {
   const results = [];
   const path = 'products/?group=' + encodeURIComponent(groupName);
@@ -2016,21 +2026,17 @@ async function fetchAMProductsForGroup(groupName) {
   return results;
 }
 
-async function loadAMProducts() {
-  const btn  = document.getElementById('load-am-products-btn');
-  const prog = document.getElementById('fetch-progress');
-  btn.disabled = true;
-  btn.textContent = 'Loading…';
-  prog.classList.add('visible');
-
+// Pulls in any AM products (for collections already in the summary) that
+// aren't yet represented as rows. Returns the number of rows added.
+// Leaves button/progress-bar chrome to the caller (see refreshAMData()).
+async function loadNewAMProducts(prog) {
   const collections = [...new Set(pivotRows.map(r => r.collection))];
   const existingStyles = new Set(pivotRows.map(r => r.style));
-  let added = 0;
   const newRows = [];
 
   for (let ci = 0; ci < collections.length; ci++) {
     const coll = collections[ci];
-    prog.textContent = 'Loading ' + (ci + 1) + '/' + collections.length + ': ' + coll;
+    if (prog) prog.textContent = 'Products ' + (ci + 1) + '/' + collections.length + ': ' + coll;
     try {
       const products = await fetchAMProductsForGroup(coll);
       products.forEach(p => {
@@ -2050,7 +2056,6 @@ async function loadAMProducts() {
           sizes,
           fromAM: true
         });
-        added++;
       });
     } catch(e) {
       console.warn('Failed to fetch products for', coll, e);
@@ -2073,28 +2078,34 @@ async function loadAMProducts() {
     renderHeader();
     renderTable();
     updateSummaryLive();
-
-    // Fetch stock & online orders for the newly added styles
-    const newStyles = newRows.map(r => r.style);
-    if (amStockLoaded || onlineStoreOrdersLoaded) {
-      prog.textContent = 'Fetching stock for new styles…';
-      const ordersPromise = onlineStoreOrdersLoaded ? fetchOnlineStoreOrders() : Promise.resolve();
-      const BATCH = 5;
-      for (let i = 0; i < newStyles.length; i += BATCH) {
-        await Promise.all(newStyles.slice(i, i + BATCH).map(s => fetchStyleStock(s)));
-        prog.textContent = 'Stock ' + Math.min(i + BATCH, newStyles.length) + '/' + newStyles.length;
-        renderTable();
-      }
-      await ordersPromise;
-      renderTable();
-    }
   }
+
+  return newRows.length;
+}
+
+// Combined "Load All AM Products" + "Refresh Stock" action: pulls in any
+// missing AM products for the summary's collections, then refreshes stock
+// & online orders for every style (new and existing).
+async function refreshAMData() {
+  const btn  = document.getElementById('fetch-am-btn');
+  const prog = document.getElementById('fetch-progress');
+  if (btn) { btn.disabled = true; btn.classList.add('fetching'); btn.textContent = 'Loading products…'; }
+  prog.classList.add('visible');
+
+  const added = await loadNewAMProducts(prog);
+
+  if (btn) btn.textContent = 'Fetching stock…';
+  await refreshStock(prog);
 
   prog.classList.remove('visible');
   prog.textContent = '';
-  btn.disabled = false;
-  btn.textContent = added ? '✓ ' + added + ' AM Products Loaded' : '↓ Load All AM Products';
-  btn.classList.toggle('btn-active', added > 0);
+  if (btn) {
+    btn.disabled = false;
+    btn.classList.remove('fetching');
+    btn.textContent = added ? '✓ ' + added + ' New · Refreshed' : '↻ Refresh AM Data';
+    btn.classList.add('btn-active');
+  }
+  renderTable();
 }
 
 
