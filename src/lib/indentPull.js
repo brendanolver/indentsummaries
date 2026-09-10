@@ -37,16 +37,17 @@ const SIZE_ORDER = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '28', '30',
 // same Quickfill/online-store exclusions, then consolidates by style/size. `includeItem`
 // decides which order-item lines qualify (this is the only thing that differs between
 // pullIndentSummary and pullPOSummary).
-async function pullOrderItems({ collections, sellDate, includeItem, trackAccounts }) {
+async function pullOrderItems({
+  collections, sellDate, includeItem, trackAccounts,
+  excludeOnlineStore = true, excludeOrderIds = [],
+}) {
   if (!Array.isArray(collections) || collections.length === 0) {
     throw new Error('At least one collection is required');
-  }
-  if (!sellDate) {
-    throw new Error('sellDate is required');
   }
 
   const styleMap = await buildStyleMap(collections);
   const validStyles = new Set(Object.keys(styleMap));
+  const excludeIds = new Set((excludeOrderIds || []).map(String));
 
   const orders = await amGetAllPages('orders', { is_open: '1' });
 
@@ -54,8 +55,9 @@ async function pullOrderItems({ collections, sellDate, includeItem, trackAccount
   const sizesFound = new Set();
 
   orders.forEach((order) => {
-    if ((order.date_internal || '') < sellDate) return;
-    if (order.customer_id === ONLINE_STORE_CUSTOMER_ID) return; // WNDRR ONLINE STORE — tracked separately
+    if (sellDate && (order.date_internal || '') < sellDate) return;
+    if (excludeOnlineStore && order.customer_id === ONLINE_STORE_CUSTOMER_ID) return; // WNDRR ONLINE STORE — tracked separately
+    if (excludeIds.has(String(order.order_id))) return;
     if (isQuickfillOrder(order)) return;
     (order.order_items || []).forEach((item) => {
       if (!includeItem(item)) return;
@@ -105,23 +107,31 @@ async function pullOrderItems({ collections, sellDate, includeItem, trackAccount
 }
 
 async function pullIndentSummary({ collections, sellDate }) {
+  if (!sellDate) {
+    throw new Error('sellDate is required');
+  }
   return pullOrderItems({
     collections,
     sellDate,
     includeItem: (item) => !item.purchase_order_id, // exclude lines that already have a PO raised
     trackAccounts: true,
+    excludeOnlineStore: true, // WNDRR ONLINE STORE tracked separately on the indent report
   });
 }
 
 // Mirror of pullIndentSummary: consolidates only the order-item lines that DO already
 // have a purchase order raised — i.e. what's already committed to production, as
-// opposed to what still needs a PO ("Need to Buy").
-async function pullPOSummary({ collections, sellDate }) {
+// opposed to what still needs a PO ("Need to Buy"). POs tend to be raised against
+// older orders than the indent's sell date filters for, so sellDate is optional here
+// (omit it to include every open order with a PO raised, regardless of order date).
+async function pullPOSummary({ collections, sellDate, excludeOrderIds }) {
   return pullOrderItems({
     collections,
-    sellDate,
+    sellDate: sellDate || null,
     includeItem: (item) => !!item.purchase_order_id,
     trackAccounts: false,
+    excludeOnlineStore: false, // WNDRR ONLINE STORE units are real production commitments here
+    excludeOrderIds,
   });
 }
 

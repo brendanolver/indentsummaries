@@ -34,8 +34,8 @@ router.post('/am/pull', async (req, res) => {
 
 router.post('/am/po-summary', async (req, res) => {
   try {
-    const { collections, sellDate } = req.body || {};
-    const result = await pullPOSummary({ collections, sellDate });
+    const { collections, sellDate, excludeOrderIds } = req.body || {};
+    const result = await pullPOSummary({ collections, sellDate, excludeOrderIds });
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });
