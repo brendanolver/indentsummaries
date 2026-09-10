@@ -173,12 +173,16 @@ tr.coll-spacer td{height:20px;background:#f2f2f0;border:none;padding:0}
 .po-preview-grand span{font-variant-numeric:tabular-nums;margin-left:8px}
 .po-preview-actions{display:flex;gap:10px;flex-shrink:0}
 .po-preview-actions .btn{border-color:#444}
-.po-opt-body{padding:20px 22px;display:flex;flex-direction:column;gap:16px}
+.po-opt-body{padding:20px 22px;display:flex;flex-direction:column;gap:16px;overflow-y:auto;max-height:calc(90vh - 140px)}
 .po-opt-field{display:flex;flex-direction:column;gap:6px}
 .po-opt-label{font-size:11px;font-weight:700;color:#111;text-transform:uppercase;letter-spacing:.4px}
 .po-opt-input{padding:8px 10px;border:1.5px solid #e0e0e0;border-radius:6px;font-size:13px;color:#111;outline:none;font-family:inherit;width:100%}
 .po-opt-input:focus{border-color:#111;box-shadow:0 0 0 3px rgba(0,0,0,.06)}
 .po-opt-hint{font-size:10.5px;color:#999;line-height:1.4}
+.po-opt-coll-list{display:flex;flex-direction:column;gap:1px;max-height:160px;overflow-y:auto;border:1.5px solid #e0e0e0;border-radius:6px;padding:5px}
+.po-opt-coll-item{display:flex;align-items:center;gap:8px;padding:5px 6px;font-size:12.5px;color:#111;border-radius:4px;cursor:pointer}
+.po-opt-coll-item:hover{background:#f5f5f3}
+.po-opt-coll-item input{accent-color:#111;width:13px;height:13px;cursor:pointer;flex-shrink:0}
 </style>
 </head>
 <body>
@@ -366,6 +370,10 @@ tr.coll-spacer td{height:20px;background:#f2f2f0;border:none;padding:0}
       <button type="button" class="po-preview-close" onclick="closePOSummaryOptions()">&times;</button>
     </div>
     <div class="po-opt-body">
+      <div class="po-opt-field">
+        <span class="po-opt-label">Collections to include</span>
+        <div class="po-opt-coll-list" id="po-opt-collections"></div>
+      </div>
       <label class="po-opt-field">
         <span class="po-opt-label">Only include Sales Orders placed on/after</span>
         <input type="date" id="po-opt-date" class="po-opt-input">
@@ -1976,22 +1984,47 @@ function exportPDF() {
 // (optional) date and its own order-number exclusions via a small options form,
 // rather than blindly reusing lastPullParams.sellDate. Only collections are
 // reused from the last pull.
-let poSummaryCollections = null; // set by exportPOSummaryPDF, read by submitPOSummaryOptions
+let poSummaryCollectionsSet = new Set(); // checkbox state in the options modal, kept across opens in the session
 
-function exportPOSummaryPDF() {
-  let collections = lastPullParams && lastPullParams.collections;
-  if (!collections) {
-    // Data loaded a different way (CSV, or a session/archive saved before this feature
-    // existed) — recover collections from the loaded rows.
-    if (!pivotRows.length) { alert('Load some data first (pull from ApparelMagic, or restore a summary).'); return; }
-    collections = [...new Set(pivotRows.map(r => r.collection).filter(Boolean))];
+async function exportPOSummaryPDF() {
+  if (!poSummaryCollectionsSet.size) {
+    // First time opening this modal — seed it from whatever the current summary used.
+    let defaultCollections = lastPullParams && lastPullParams.collections;
+    if (!defaultCollections) {
+      // Data loaded a different way (CSV, or a session/archive saved before this feature
+      // existed) — recover collections from the loaded rows.
+      if (!pivotRows.length) { alert('Load some data first (pull from ApparelMagic, or restore a summary).'); return; }
+      defaultCollections = [...new Set(pivotRows.map(r => r.collection).filter(Boolean))];
+    }
+    poSummaryCollectionsSet = new Set(defaultCollections);
   }
-  poSummaryCollections = collections;
 
+  // amCollectionsList is only populated by loadPullCollections(), which is skipped
+  // when the app resumes a saved session — fetch it now if that never happened.
+  if (!amCollectionsList.length) {
+    try { await loadPullCollections(); } catch (e) { /* renderPOOptionsCollections falls back to the current selection */ }
+  }
+
+  renderPOOptionsCollections();
   document.getElementById('po-opt-date').value = lastPOSellDate;
   document.getElementById('po-opt-exclude').value = lastPOExcludeOrders;
   document.getElementById('po-opt-heading').value = lastPOHeading;
   document.getElementById('po-options-overlay').classList.add('visible');
+}
+
+function renderPOOptionsCollections() {
+  const panel = document.getElementById('po-opt-collections');
+  panel.innerHTML = '';
+  const list = amCollectionsList.length ? amCollectionsList : [...poSummaryCollectionsSet];
+  list.forEach(c => {
+    const item = document.createElement('label');
+    item.className = 'po-opt-coll-item';
+    item.innerHTML = '<input type="checkbox"' + (poSummaryCollectionsSet.has(c) ? ' checked' : '') + '><span>' + c + '</span>';
+    item.querySelector('input').addEventListener('change', e => {
+      if (e.target.checked) poSummaryCollectionsSet.add(c); else poSummaryCollectionsSet.delete(c);
+    });
+    panel.appendChild(item);
+  });
 }
 
 function closePOSummaryOptions() {
@@ -1999,6 +2032,7 @@ function closePOSummaryOptions() {
 }
 
 async function submitPOSummaryOptions() {
+  if (!poSummaryCollectionsSet.size) { alert('Select at least one collection.'); return; }
   lastPOSellDate = document.getElementById('po-opt-date').value; // native date input — already YYYY-MM-DD or ''
   lastPOExcludeOrders = document.getElementById('po-opt-exclude').value.trim();
   lastPOHeading = document.getElementById('po-opt-heading').value.trim() || 'PO SUMMARY';
@@ -2012,7 +2046,7 @@ async function submitPOSummaryOptions() {
     const res = await fetch('/api/am/po-summary', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ collections: poSummaryCollections, sellDate: lastPOSellDate || undefined, excludeOrderIds })
+      body: JSON.stringify({ collections: [...poSummaryCollectionsSet], sellDate: lastPOSellDate || undefined, excludeOrderIds })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to build PO Summary');
