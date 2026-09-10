@@ -1924,7 +1924,7 @@ function renderPOSummaryPDF(rows, sizeCols, heading) {
   const { jsPDF } = window.jspdf;
   const ML = 10, MR = 10, PW = 297, PH = 210;
   const TW = PW - ML - MR;
-  const HDR_H = 24; // banner height (logo + heading + subheading) — page 1 only
+  const HDR_H = 12; // banner height (logo + heading + subheading) — page 1 only
   const CONT_TOP = 8; // top margin on continuation pages, where the table just resumes
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
@@ -1935,21 +1935,21 @@ function renderPOSummaryPDF(rows, sizeCols, heading) {
   doc.setFillColor(17, 17, 17);
   doc.rect(ML, 0, TW, HDR_H, 'F');
 
-  const logoD = 13;
+  const logoD = 8;
   if (logoSrc) {
-    try { doc.addImage(logoSrc, 'PNG', ML + 5, (HDR_H - logoD) / 2, logoD, logoD); }
+    try { doc.addImage(logoSrc, 'PNG', ML + 3, (HDR_H - logoD) / 2, logoD, logoD); }
     catch (e) { /* logo optional — heading text still renders */ }
   }
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
+  doc.setFontSize(9);
   doc.setTextColor(255, 255, 255);
-  doc.text(heading.toUpperCase(), ML + TW / 2, HDR_H / 2 - 2, { align: 'center' });
+  doc.text(heading.toUpperCase(), ML + TW / 2, HDR_H / 2 - 1, { align: 'center' });
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
+  doc.setFontSize(5.5);
   doc.setTextColor(165, 165, 165);
-  doc.text('Open Orders — All POs Consolidated', ML + TW / 2, HDR_H / 2 + 5, { align: 'center' });
+  doc.text('Open Orders — All POs Consolidated', ML + TW / 2, HDR_H / 2 + 3.5, { align: 'center' });
 
   doc.setTextColor(0, 0, 0);
 
@@ -2012,8 +2012,8 @@ function renderPOSummaryPDF(rows, sizeCols, heading) {
       if (data.section !== 'body' || data.column.index !== SIZEQTY_COL || data.row.index === grandRowIndex) return;
       const pairs = rowSizePairs[data.row.index];
       if (!pairs || !pairs.length) return;
-      const slotW = 9, rightPad = 5;
-      let x = data.cell.x + data.cell.width - rightPad - pairs.length * slotW;
+      const slotW = 9;
+      let x = data.cell.x + (data.cell.width - pairs.length * slotW) / 2;
       const labelY = data.cell.y + data.cell.height / 2 - 1.4;
       const qtyY   = data.cell.y + data.cell.height / 2 + 3.2;
       pairs.forEach(p => {
