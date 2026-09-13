@@ -2266,11 +2266,17 @@ async function fetchAMProductsForGroup(groupName) {
   return results;
 }
 
-// Pulls in any AM products (for collections already in the summary) that
-// aren't yet represented as rows. Returns the number of rows added.
-// Leaves button/progress-bar chrome to the caller (see refreshAMData()).
+// Pulls in any AM products (for the originally-selected collections) that
+// aren't yet represented as rows — including styles with no current orders.
+// Falls back to whatever collections are already in the loaded rows if the
+// summary wasn't pulled through the collection picker (CSV, or an older
+// session/archive saved before lastPullParams existed). Returns the number
+// of rows added. Leaves button/progress-bar chrome to the caller (see
+// refreshAMData()).
 async function loadNewAMProducts(prog) {
-  const collections = [...new Set(pivotRows.map(r => r.collection))];
+  const collections = (lastPullParams && lastPullParams.collections)
+    ? [...lastPullParams.collections]
+    : [...new Set(pivotRows.map(r => r.collection))];
   const existingStyles = new Set(pivotRows.map(r => r.style));
   const newRows = [];
 

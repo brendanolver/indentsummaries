@@ -2,6 +2,9 @@
 const { amGetAllPages } = require('./amClient');
 
 const ONLINE_STORE_CUSTOMER_ID = '1068'; // "WNDRR ONLINE STORE" — tracked separately in the Online Order column, excluded from indent totals
+const ONLINE_STORE_WAREHOUSE_ID = '1002'; // "Shopify Online Store" in AM's warehouses list — excluded line-by-line below,
+// regardless of which customer the order is under, since these lines are fulfilled from
+// the online store's own stock pool rather than needing new production.
 
 // Never real indent/PO demand — excluded from every pull, regardless of report type.
 const GLOBALLY_EXCLUDED_CUSTOMER_IDS = new Set([
@@ -42,8 +45,9 @@ async function buildStyleMap(collections) {
 const SIZE_ORDER = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '28', '30', '32', '34', '36', '38', '40', 'OS'];
 
 // Shared order-item crawl: fetches open orders scoped to collections/sellDate, with the
-// same Quickfill/globally-excluded-customer/online-store exclusions, then consolidates
-// by style/size. `includeItem` decides which order-item lines qualify (this is the only
+// same Quickfill/globally-excluded-customer/online-store-customer/online-store-warehouse
+// exclusions, then consolidates by style/size. `includeItem` decides which order-item
+// lines qualify (this is the only
 // thing that differs between pullIndentSummary and pullPOSummary).
 async function pullOrderItems({
   collections, sellDate, includeItem, trackAccounts,
@@ -69,6 +73,7 @@ async function pullOrderItems({
     if (excludeIds.has(String(order.order_id))) return;
     if (isQuickfillOrder(order)) return;
     (order.order_items || []).forEach((item) => {
+      if (item.warehouse_id === ONLINE_STORE_WAREHOUSE_ID) return; // fulfilled from online store stock, not new demand
       if (!includeItem(item)) return;
 
       const style = item.style_number || '';
