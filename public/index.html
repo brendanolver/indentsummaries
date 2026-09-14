@@ -687,7 +687,7 @@ function finalizeLoad() {
   renderHeader();
   renderTable();
   showApp();
-  refreshStockOnly();
+  refreshAMData(); // also loads any zero-order products for the selected collections
 }
 
 function collRank(col) {
@@ -1366,26 +1366,6 @@ async function refreshStock(prog) {
   }
 
   await ordersPromise; // make sure orders are done too
-}
-
-// Stock-only refresh (no new-product pull), used after a fresh AM pull
-// where pivotRows already reflects the exact requested collections/sell date.
-async function refreshStockOnly() {
-  const btn  = document.getElementById('fetch-am-btn');
-  const prog = document.getElementById('fetch-progress');
-  if (btn) { btn.classList.add('fetching'); btn.textContent = 'Fetching…'; }
-  prog.classList.add('visible');
-
-  await refreshStock(prog);
-
-  prog.classList.remove('visible');
-  prog.textContent = '';
-  if (btn) {
-    btn.classList.remove('fetching');
-    btn.textContent  = '↻ Refresh AM Data';
-    btn.classList.add('btn-active');
-  }
-  renderTable();
 }
 
 // ── Month Totals ─────────────────────────────────────────────────────────────
