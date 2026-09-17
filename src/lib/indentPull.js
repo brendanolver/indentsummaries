@@ -63,7 +63,7 @@ async function pullOrderItems({
 
   const orders = await amGetAllPages('orders', { is_open: '1' });
 
-  const pivotMap = {}; // style -> { style, desc, colours:Set, collection, category, sizes, accounts:Set }
+  const pivotMap = {}; // style -> { style, desc, colours:Set, collection, category, sizes, accounts:Map<customerId,{name,units}> }
   const sizesFound = new Set();
 
   orders.forEach((order) => {
@@ -95,13 +95,18 @@ async function pullOrderItems({
           collection: meta.collection,
           category: meta.category,
           sizes: {},
-          accounts: new Set(),
+          accounts: new Map(), // customer_id -> { name, units }
         };
       }
       const colour = item.attr_2 || meta.colour;
       if (colour) pivotMap[style].colours.add(colour);
       pivotMap[style].sizes[size] = (pivotMap[style].sizes[size] || 0) + units;
-      if (trackAccounts && order.customer_id) pivotMap[style].accounts.add(order.customer_id);
+      if (trackAccounts && order.customer_id) {
+        const accts = pivotMap[style].accounts;
+        const entry = accts.get(order.customer_id) || { name: order.customer_name || order.customer_id, units: 0 };
+        entry.units += units;
+        accts.set(order.customer_id, entry);
+      }
       sizesFound.add(size);
     });
   });
@@ -115,7 +120,10 @@ async function pullOrderItems({
     collection: r.collection,
     category: r.category,
     sizes: r.sizes,
-    ...(trackAccounts ? { accounts: r.accounts.size } : {}),
+    ...(trackAccounts ? {
+      accounts: r.accounts.size,
+      accountBreakdown: [...r.accounts.values()].sort((a, b) => b.units - a.units),
+    } : {}),
   }));
 
   return { pivotRows, sizeColumns };

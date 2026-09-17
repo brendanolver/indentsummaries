@@ -153,6 +153,16 @@ tr.coll-spacer td{height:20px;background:#f2f2f0;border:none;padding:0}
 .size-item{display:flex;flex-direction:column;align-items:center;min-width:28px}
 .sz-label{font-size:9px;font-weight:700;text-transform:uppercase;color:#999;letter-spacing:.5px;line-height:1.2}
 .sz-val{font-size:12px;font-weight:600;color:#111;font-variant-numeric:tabular-nums;line-height:1.4}
+td.accts-toggle{cursor:pointer;user-select:none}
+td.accts-toggle:hover{background:#eef0ef !important}
+.accts-arrow{display:inline-block;width:0;height:0;margin-right:7px;vertical-align:1px;border-top:4px solid transparent;border-bottom:4px solid transparent;border-left:5px solid #111;transition:transform .15s ease}
+.accts-arrow.open{transform:rotate(90deg)}
+tr.accts-detail-row td{background:#fbfbfa;padding:0;border-bottom:1px solid #f0f0f0}
+.accts-detail-table{width:auto;min-width:0;margin:8px 14px 10px 42px;border-collapse:collapse}
+.accts-detail-table tr{border-bottom:1px solid #f0f0f0}
+.accts-detail-table tr:last-child{border-bottom:none}
+.accts-detail-table td{padding:4px 18px 4px 0;font-size:11.5px;color:#444}
+.accts-detail-table td.num{text-align:right;font-weight:600;color:#111;font-variant-numeric:tabular-nums;padding-right:0}
 ::-webkit-scrollbar{width:6px;height:6px}
 ::-webkit-scrollbar-track{background:#f5f5f5}
 ::-webkit-scrollbar-thumb{background:#ddd;border-radius:3px}
@@ -453,6 +463,7 @@ let onlineOrders = {};
 let monthDel = {};
 let cancelled = {};       // { styleKey: true/false }
 let comments  = {};       // { styleKey: string }
+let expandedAccountRows = new Set(); // styleKeys currently showing their account breakdown
 let filterCancelled = ''; // '' | 'yes' | 'no'
 let monthTotalsVisible = false;
 let amStock = {};              // { styleKey: number | null }
@@ -897,9 +908,24 @@ function renderTable() {
         addTd(tr, isCancelled ? '0' : rowTotal.toLocaleString(), 'total-col');
       }
 
-      // Accts Purchased — distinct wholesale accounts that ordered this style (AM-pull only)
+      // Accts Purchased — distinct wholesale accounts that ordered this style (AM-pull only).
+      // Click to expand a per-account unit breakdown, when we have one.
       if (!totalsOnly) {
-        addTd(tr, row.accounts != null ? row.accounts.toLocaleString() : '—', 'num');
+        const tdAcct = document.createElement('td');
+        tdAcct.className = 'num';
+        if (row.accountBreakdown && row.accountBreakdown.length) {
+          tdAcct.className = 'num accts-toggle';
+          const isOpen = expandedAccountRows.has(row.style);
+          tdAcct.innerHTML = '<span class="accts-arrow' + (isOpen ? ' open' : '') + '"></span>' + row.accounts.toLocaleString();
+          tdAcct.addEventListener('click', () => {
+            if (expandedAccountRows.has(row.style)) expandedAccountRows.delete(row.style);
+            else expandedAccountRows.add(row.style);
+            renderTable();
+          });
+        } else {
+          tdAcct.textContent = row.accounts != null ? row.accounts.toLocaleString() : '—';
+        }
+        tr.appendChild(tdAcct);
       }
 
       // Avail to Sell (Online Store WH) — sits right after Indent Orders
@@ -1031,6 +1057,25 @@ function renderTable() {
       tr.appendChild(tdComment);
 
       tbody.appendChild(tr);
+
+      if (row.accountBreakdown && row.accountBreakdown.length && expandedAccountRows.has(row.style)) {
+        const dtr = document.createElement('tr');
+        dtr.className = 'accts-detail-row';
+        const dtd = document.createElement('td');
+        dtd.colSpan = colSpanCount;
+        const table = document.createElement('table');
+        table.className = 'accts-detail-table';
+        row.accountBreakdown.forEach(a => {
+          const r = document.createElement('tr');
+          const nameTd = document.createElement('td'); nameTd.textContent = a.name;
+          const unitsTd = document.createElement('td'); unitsTd.className = 'num'; unitsTd.textContent = a.units.toLocaleString();
+          r.appendChild(nameTd); r.appendChild(unitsTd);
+          table.appendChild(r);
+        });
+        dtd.appendChild(table);
+        dtr.appendChild(dtd);
+        tbody.appendChild(dtr);
+      }
     });
 
     // ── Collection subtotal row ──
