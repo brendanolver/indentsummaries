@@ -243,9 +243,15 @@ tr.coll-spacer td{height:20px;background:#f2f2f0;border:none;padding:0}
           <div class="dropdown-panel" id="dd-pullcoll-panel" style="width:100%"></div>
         </div>
       </div>
-      <div>
-        <label for="pull-sell-date" style="display:block;font-size:11px;font-weight:600;color:#555;margin-bottom:6px">Indent sell start date</label>
-        <input type="date" id="pull-sell-date" class="search-input" style="width:100%">
+      <div style="display:flex;gap:12px">
+        <div style="flex:1">
+          <label for="pull-sell-date-from" style="display:block;font-size:11px;font-weight:600;color:#555;margin-bottom:6px">Indent sell date — from</label>
+          <input type="date" id="pull-sell-date-from" class="search-input" style="width:100%">
+        </div>
+        <div style="flex:1">
+          <label for="pull-sell-date-to" style="display:block;font-size:11px;font-weight:600;color:#555;margin-bottom:6px">to (optional)</label>
+          <input type="date" id="pull-sell-date-to" class="search-input" style="width:100%">
+        </div>
       </div>
       <div style="display:flex;align-items:center;gap:10px">
         <button class="btn btn-primary" id="pull-am-btn" onclick="pullFromAM()">Pull from ApparelMagic</button>
@@ -374,11 +380,20 @@ tr.coll-spacer td{height:20px;background:#f2f2f0;border:none;padding:0}
         <span class="po-opt-label">Collections to include</span>
         <div class="po-opt-coll-list" id="po-opt-collections"></div>
       </div>
-      <label class="po-opt-field">
-        <span class="po-opt-label">Only include Sales Orders placed on/after</span>
-        <input type="date" id="po-opt-date" class="po-opt-input">
-        <span class="po-opt-hint">Leave blank to include every open order, regardless of date.</span>
-      </label>
+      <div class="po-opt-field">
+        <span class="po-opt-label">Only include Sales Orders placed</span>
+        <div style="display:flex;gap:12px">
+          <label style="flex:1;display:flex;flex-direction:column;gap:6px">
+            <span class="po-opt-hint">From</span>
+            <input type="date" id="po-opt-date-from" class="po-opt-input">
+          </label>
+          <label style="flex:1;display:flex;flex-direction:column;gap:6px">
+            <span class="po-opt-hint">To (optional)</span>
+            <input type="date" id="po-opt-date-to" class="po-opt-input">
+          </label>
+        </div>
+        <span class="po-opt-hint">Leave both blank to include every open order, regardless of date.</span>
+      </div>
       <label class="po-opt-field">
         <span class="po-opt-label">Sales Order numbers to exclude</span>
         <input type="text" id="po-opt-exclude" class="po-opt-input" placeholder="e.g. 124389, 137693">
@@ -466,10 +481,10 @@ document.getElementById('search-input').addEventListener('input', e => { searchQ
 // ── AM collection pull ───────────────────────────────────────────────────────
 let amCollectionsList = [];
 let pullCollections = new Set();
-let lastPullParams = null; // { collections, sellDate } — remembered so the PO Summary export can reuse the same collections
+let lastPullParams = null; // { collections, sellDateFrom, sellDateTo } — remembered so the PO Summary export can reuse the same collections
 let lastPOHeading = ''; // remembered across exports in this session
-let lastPOSellDate = ''; // independent of the indent pull's sellDate — POs are typically raised
-                          // against older orders, so this is usually left blank (no date filter)
+let lastPOSellDateFrom = ''; // independent of the indent pull's dates — POs are typically raised
+let lastPOSellDateTo = '';   // against older orders, so these are usually left blank (no date filter)
 let lastPOExcludeOrders = ''; // raw comma-separated Sales Order numbers, remembered across exports
 let currentPOSummary = null; // { rows, sizeCols, heading } — set when the preview is shown, read by the PDF export
 
@@ -510,9 +525,11 @@ function updatePullCollLabel() {
 }
 
 async function pullFromAM() {
-  const sellDate = document.getElementById('pull-sell-date').value;
+  const sellDateFrom = document.getElementById('pull-sell-date-from').value;
+  const sellDateTo = document.getElementById('pull-sell-date-to').value;
   if (!pullCollections.size) { showError('Select at least one collection.'); return; }
-  if (!sellDate) { showError('Set the indent sell start date.'); return; }
+  if (!sellDateFrom) { showError('Set the indent sell start date.'); return; }
+  if (sellDateTo && sellDateTo < sellDateFrom) { showError('The "to" date must be on or after the "from" date.'); return; }
   hideError();
   const btn = document.getElementById('pull-am-btn');
   const prog = document.getElementById('pull-progress');
@@ -523,14 +540,14 @@ async function pullFromAM() {
     const res = await fetch('/api/am/pull', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ collections: [...pullCollections], sellDate })
+      body: JSON.stringify({ collections: [...pullCollections], sellDateFrom, sellDateTo: sellDateTo || undefined })
     });
     const data = await res.json();
     if (!res.ok) { showError(data.error || 'Pull failed.'); return; }
     if (!data.pivotRows || !data.pivotRows.length) { showError('No matching indent orders found for that selection.'); return; }
     pivotRows = data.pivotRows;
     sizeColumns = data.sizeColumns;
-    lastPullParams = { collections: [...pullCollections], sellDate };
+    lastPullParams = { collections: [...pullCollections], sellDateFrom, sellDateTo: sellDateTo || null };
     finalizeLoad();
   } catch (e) {
     showError('Pull failed: ' + e.message);
@@ -1961,8 +1978,8 @@ function exportPDF() {
 // collection grouping. Reuses whatever collections the current pull used.
 // Unlike the Indent Summary, POs are typically raised against older orders than
 // whatever sell date the indent pull used — so this export asks for its own
-// (optional) date and its own order-number exclusions via a small options form,
-// rather than blindly reusing lastPullParams.sellDate. Only collections are
+// (optional) date range and its own order-number exclusions via a small options
+// form, rather than blindly reusing lastPullParams' dates. Only collections are
 // reused from the last pull.
 let poSummaryCollectionsSet = new Set(); // checkbox state in the options modal, kept across opens in the session
 
@@ -1986,7 +2003,8 @@ async function exportPOSummaryPDF() {
   }
 
   renderPOOptionsCollections();
-  document.getElementById('po-opt-date').value = lastPOSellDate;
+  document.getElementById('po-opt-date-from').value = lastPOSellDateFrom;
+  document.getElementById('po-opt-date-to').value = lastPOSellDateTo;
   document.getElementById('po-opt-exclude').value = lastPOExcludeOrders;
   document.getElementById('po-opt-heading').value = lastPOHeading;
   document.getElementById('po-options-overlay').classList.add('visible');
@@ -2013,7 +2031,12 @@ function closePOSummaryOptions() {
 
 async function submitPOSummaryOptions() {
   if (!poSummaryCollectionsSet.size) { alert('Select at least one collection.'); return; }
-  lastPOSellDate = document.getElementById('po-opt-date').value; // native date input — already YYYY-MM-DD or ''
+  lastPOSellDateFrom = document.getElementById('po-opt-date-from').value; // native date input — already YYYY-MM-DD or ''
+  lastPOSellDateTo = document.getElementById('po-opt-date-to').value;
+  if (lastPOSellDateTo && lastPOSellDateFrom && lastPOSellDateTo < lastPOSellDateFrom) {
+    alert('The "to" date must be on or after the "from" date.');
+    return;
+  }
   lastPOExcludeOrders = document.getElementById('po-opt-exclude').value.trim();
   lastPOHeading = document.getElementById('po-opt-heading').value.trim() || 'PO SUMMARY';
   const excludeOrderIds = lastPOExcludeOrders ? lastPOExcludeOrders.split(',').map(s => s.trim()).filter(Boolean) : [];
@@ -2026,7 +2049,12 @@ async function submitPOSummaryOptions() {
     const res = await fetch('/api/am/po-summary', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ collections: [...poSummaryCollectionsSet], sellDate: lastPOSellDate || undefined, excludeOrderIds })
+      body: JSON.stringify({
+        collections: [...poSummaryCollectionsSet],
+        sellDateFrom: lastPOSellDateFrom || undefined,
+        sellDateTo: lastPOSellDateTo || undefined,
+        excludeOrderIds
+      })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to build PO Summary');
