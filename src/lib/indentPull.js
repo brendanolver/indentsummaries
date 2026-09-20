@@ -70,8 +70,8 @@ async function pullOrderItems({
   orders.forEach((order) => {
     if (sellDateFrom && (order.date_internal || '') < sellDateFrom) return;
     if (sellDateTo && (order.date_internal || '') > sellDateTo) return;
-    if (deliveryDateFrom && (order.date_required || '') < deliveryDateFrom) return;
-    if (deliveryDateTo && (order.date_required || '') > deliveryDateTo) return;
+    if (deliveryDateFrom && (order.date_due_internal || '') < deliveryDateFrom) return;
+    if (deliveryDateTo && (order.date_due_internal || '') > deliveryDateTo) return;
     if (excludeOnlineStore && order.customer_id === ONLINE_STORE_CUSTOMER_ID) return; // WNDRR ONLINE STORE — tracked separately
     if (GLOBALLY_EXCLUDED_CUSTOMER_IDS.has(order.customer_id)) return;
     if (excludeIds.has(String(order.order_id))) return;
