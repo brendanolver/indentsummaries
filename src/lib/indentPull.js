@@ -50,7 +50,8 @@ const SIZE_ORDER = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '28', '30',
 // order-item lines qualify (this is the only
 // thing that differs between pullIndentSummary and pullPOSummary).
 async function pullOrderItems({
-  collections, sellDateFrom, sellDateTo, includeItem, trackAccounts,
+  collections, sellDateFrom, sellDateTo, deliveryDateFrom, deliveryDateTo,
+  includeItem, trackAccounts,
   excludeOnlineStore = true, excludeOrderIds = [],
 }) {
   if (!Array.isArray(collections) || collections.length === 0) {
@@ -69,6 +70,8 @@ async function pullOrderItems({
   orders.forEach((order) => {
     if (sellDateFrom && (order.date_internal || '') < sellDateFrom) return;
     if (sellDateTo && (order.date_internal || '') > sellDateTo) return;
+    if (deliveryDateFrom && (order.date_required || '') < deliveryDateFrom) return;
+    if (deliveryDateTo && (order.date_required || '') > deliveryDateTo) return;
     if (excludeOnlineStore && order.customer_id === ONLINE_STORE_CUSTOMER_ID) return; // WNDRR ONLINE STORE — tracked separately
     if (GLOBALLY_EXCLUDED_CUSTOMER_IDS.has(order.customer_id)) return;
     if (excludeIds.has(String(order.order_id))) return;
@@ -129,7 +132,7 @@ async function pullOrderItems({
   return { pivotRows, sizeColumns };
 }
 
-async function pullIndentSummary({ collections, sellDateFrom, sellDateTo }) {
+async function pullIndentSummary({ collections, sellDateFrom, sellDateTo, deliveryDateFrom, deliveryDateTo, excludeOrderIds }) {
   if (!sellDateFrom) {
     throw new Error('sellDateFrom is required');
   }
@@ -137,9 +140,12 @@ async function pullIndentSummary({ collections, sellDateFrom, sellDateTo }) {
     collections,
     sellDateFrom,
     sellDateTo: sellDateTo || null,
+    deliveryDateFrom: deliveryDateFrom || null,
+    deliveryDateTo: deliveryDateTo || null,
     includeItem: (item) => !item.purchase_order_id, // exclude lines that already have a PO raised
     trackAccounts: true,
     excludeOnlineStore: true, // WNDRR ONLINE STORE tracked separately on the indent report
+    excludeOrderIds: excludeOrderIds || [],
   });
 }
 
@@ -148,11 +154,13 @@ async function pullIndentSummary({ collections, sellDateFrom, sellDateTo }) {
 // individually raised against the line in ApparelMagic — unlike pullIndentSummary,
 // this isn't scoped to "still needs a PO". The whole range is optional (omit both to
 // include every open order).
-async function pullPOSummary({ collections, sellDateFrom, sellDateTo, excludeOrderIds }) {
+async function pullPOSummary({ collections, sellDateFrom, sellDateTo, deliveryDateFrom, deliveryDateTo, excludeOrderIds }) {
   return pullOrderItems({
     collections,
     sellDateFrom: sellDateFrom || null,
     sellDateTo: sellDateTo || null,
+    deliveryDateFrom: deliveryDateFrom || null,
+    deliveryDateTo: deliveryDateTo || null,
     includeItem: () => true,
     trackAccounts: false,
     excludeOnlineStore: false, // WNDRR ONLINE STORE units are real production commitments here

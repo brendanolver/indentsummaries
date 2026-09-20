@@ -263,6 +263,20 @@ tr.accts-detail-row td{background:#fbfbfa;padding:0;border-bottom:1px solid #f0f
           <input type="date" id="pull-sell-date-to" class="search-input" style="width:100%">
         </div>
       </div>
+      <div style="display:flex;gap:12px">
+        <div style="flex:1">
+          <label for="pull-del-date-from" style="display:block;font-size:11px;font-weight:600;color:#555;margin-bottom:6px">Delivery date — from (optional)</label>
+          <input type="date" id="pull-del-date-from" class="search-input" style="width:100%">
+        </div>
+        <div style="flex:1">
+          <label for="pull-del-date-to" style="display:block;font-size:11px;font-weight:600;color:#555;margin-bottom:6px">to (optional)</label>
+          <input type="date" id="pull-del-date-to" class="search-input" style="width:100%">
+        </div>
+      </div>
+      <div>
+        <label for="pull-exclude-orders" style="display:block;font-size:11px;font-weight:600;color:#555;margin-bottom:6px">Sales Order numbers to exclude (optional)</label>
+        <input type="text" id="pull-exclude-orders" class="search-input" style="width:100%" placeholder="e.g. 124389, 137693">
+      </div>
       <div style="display:flex;align-items:center;gap:10px">
         <button class="btn btn-primary" id="pull-am-btn" onclick="pullFromAM()">Pull from ApparelMagic</button>
         <span class="fetch-progress" id="pull-progress"></span>
@@ -404,6 +418,20 @@ tr.accts-detail-row td{background:#fbfbfa;padding:0;border-bottom:1px solid #f0f
         </div>
         <span class="po-opt-hint">Leave both blank to include every open order, regardless of date.</span>
       </div>
+      <div class="po-opt-field">
+        <span class="po-opt-label">Only include orders with delivery date</span>
+        <div style="display:flex;gap:12px">
+          <label style="flex:1;display:flex;flex-direction:column;gap:6px">
+            <span class="po-opt-hint">From (optional)</span>
+            <input type="date" id="po-opt-del-date-from" class="po-opt-input">
+          </label>
+          <label style="flex:1;display:flex;flex-direction:column;gap:6px">
+            <span class="po-opt-hint">To (optional)</span>
+            <input type="date" id="po-opt-del-date-to" class="po-opt-input">
+          </label>
+        </div>
+        <span class="po-opt-hint">Leave both blank to include all delivery dates.</span>
+      </div>
       <label class="po-opt-field">
         <span class="po-opt-label">Sales Order numbers to exclude</span>
         <input type="text" id="po-opt-exclude" class="po-opt-input" placeholder="e.g. 124389, 137693">
@@ -496,6 +524,8 @@ let lastPullParams = null; // { collections, sellDateFrom, sellDateTo } — reme
 let lastPOHeading = ''; // remembered across exports in this session
 let lastPOSellDateFrom = ''; // independent of the indent pull's dates — POs are typically raised
 let lastPOSellDateTo = '';   // against older orders, so these are usually left blank (no date filter)
+let lastPODeliveryDateFrom = '';
+let lastPODeliveryDateTo = '';
 let lastPOExcludeOrders = ''; // raw comma-separated Sales Order numbers, remembered across exports
 let currentPOSummary = null; // { rows, sizeCols, heading } — set when the preview is shown, read by the PDF export
 
@@ -538,9 +568,14 @@ function updatePullCollLabel() {
 async function pullFromAM() {
   const sellDateFrom = document.getElementById('pull-sell-date-from').value;
   const sellDateTo = document.getElementById('pull-sell-date-to').value;
+  const deliveryDateFrom = document.getElementById('pull-del-date-from').value;
+  const deliveryDateTo = document.getElementById('pull-del-date-to').value;
+  const excludeRaw = document.getElementById('pull-exclude-orders').value.trim();
+  const excludeOrderIds = excludeRaw ? excludeRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
   if (!pullCollections.size) { showError('Select at least one collection.'); return; }
   if (!sellDateFrom) { showError('Set the indent sell start date.'); return; }
-  if (sellDateTo && sellDateTo < sellDateFrom) { showError('The "to" date must be on or after the "from" date.'); return; }
+  if (sellDateTo && sellDateTo < sellDateFrom) { showError('The "to" sell date must be on or after the "from" date.'); return; }
+  if (deliveryDateFrom && deliveryDateTo && deliveryDateTo < deliveryDateFrom) { showError('The "to" delivery date must be on or after the "from" date.'); return; }
   hideError();
   const btn = document.getElementById('pull-am-btn');
   const prog = document.getElementById('pull-progress');
@@ -551,7 +586,14 @@ async function pullFromAM() {
     const res = await fetch('/api/am/pull', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ collections: [...pullCollections], sellDateFrom, sellDateTo: sellDateTo || undefined })
+      body: JSON.stringify({
+        collections: [...pullCollections],
+        sellDateFrom,
+        sellDateTo: sellDateTo || undefined,
+        deliveryDateFrom: deliveryDateFrom || undefined,
+        deliveryDateTo: deliveryDateTo || undefined,
+        excludeOrderIds: excludeOrderIds.length ? excludeOrderIds : undefined,
+      })
     });
     const data = await res.json();
     if (!res.ok) { showError(data.error || 'Pull failed.'); return; }
@@ -2050,6 +2092,8 @@ async function exportPOSummaryPDF() {
   renderPOOptionsCollections();
   document.getElementById('po-opt-date-from').value = lastPOSellDateFrom;
   document.getElementById('po-opt-date-to').value = lastPOSellDateTo;
+  document.getElementById('po-opt-del-date-from').value = lastPODeliveryDateFrom;
+  document.getElementById('po-opt-del-date-to').value = lastPODeliveryDateTo;
   document.getElementById('po-opt-exclude').value = lastPOExcludeOrders;
   document.getElementById('po-opt-heading').value = lastPOHeading;
   document.getElementById('po-options-overlay').classList.add('visible');
@@ -2076,10 +2120,16 @@ function closePOSummaryOptions() {
 
 async function submitPOSummaryOptions() {
   if (!poSummaryCollectionsSet.size) { alert('Select at least one collection.'); return; }
-  lastPOSellDateFrom = document.getElementById('po-opt-date-from').value; // native date input — already YYYY-MM-DD or ''
+  lastPOSellDateFrom = document.getElementById('po-opt-date-from').value;
   lastPOSellDateTo = document.getElementById('po-opt-date-to').value;
   if (lastPOSellDateTo && lastPOSellDateFrom && lastPOSellDateTo < lastPOSellDateFrom) {
-    alert('The "to" date must be on or after the "from" date.');
+    alert('The "to" sell date must be on or after the "from" date.');
+    return;
+  }
+  lastPODeliveryDateFrom = document.getElementById('po-opt-del-date-from').value;
+  lastPODeliveryDateTo = document.getElementById('po-opt-del-date-to').value;
+  if (lastPODeliveryDateTo && lastPODeliveryDateFrom && lastPODeliveryDateTo < lastPODeliveryDateFrom) {
+    alert('The "to" delivery date must be on or after the "from" date.');
     return;
   }
   lastPOExcludeOrders = document.getElementById('po-opt-exclude').value.trim();
@@ -2098,6 +2148,8 @@ async function submitPOSummaryOptions() {
         collections: [...poSummaryCollectionsSet],
         sellDateFrom: lastPOSellDateFrom || undefined,
         sellDateTo: lastPOSellDateTo || undefined,
+        deliveryDateFrom: lastPODeliveryDateFrom || undefined,
+        deliveryDateTo: lastPODeliveryDateTo || undefined,
         excludeOrderIds
       })
     });
