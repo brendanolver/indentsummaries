@@ -85,6 +85,9 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
 td.style-col{font-family:"SF Mono","Fira Code",monospace;font-size:10px;color:#bbb}
 td.desc-col{color:#111;font-weight:600;max-width:220px;white-space:normal}
 td.colour-col{color:#666;font-size:11px;max-width:180px;white-space:normal}
+td.image-col{padding:5px 6px 5px 14px;width:1%}
+.product-thumb{width:68px;height:40px;border-radius:6px;object-fit:contain;background:#f8f9fb;border:1px solid #e4e7ed;display:block}
+.product-thumb.placeholder{display:flex;align-items:center;justify-content:center;font-size:14px;color:#9ca3af}
 
 td.total-col{font-weight:800;color:#111;text-align:right}
 td.grand-total-col{font-weight:800;color:#111;text-align:right;background:#f8f8f8}
@@ -787,6 +790,7 @@ function toggleTotals() {
 // ── Build column list ────────────────────────────────────────────────────────
 function buildColumns() {
   const cols = [
+    { key: 'image',  label: '',            sortable: false },
     { key: 'style',  label: 'Style',       sortable: true },
     { key: 'desc',   label: 'Description', sortable: true },
     { key: 'colour',   label: 'Colour',   sortable: true },
@@ -853,7 +857,7 @@ function renderTable() {
   if (filterCancelled === 'yes') rows = rows.filter(r => !!cancelled[r.style]);
   if (filterCancelled === 'no')  rows = rows.filter(r => !cancelled[r.style]);
 
-  const colSpanCount = 4 + (sizesVisible ? 1 : 0) + (totalsOnly ? 1 : 5) + (onlineStoreOrdersLoaded ? 1 : 0) + (amStockLoaded ? 1 : 0) + 2; // total+accounts+onlineOrders+monthDel+grandTotal, +1 cancel +1 comments
+  const colSpanCount = 5 + (sizesVisible ? 1 : 0) + (totalsOnly ? 1 : 5) + (onlineStoreOrdersLoaded ? 1 : 0) + (amStockLoaded ? 1 : 0) + 2; // total+accounts+onlineOrders+monthDel+grandTotal, +1 cancel +1 comments
 
   if (rows.length === 0) {
     const tr = document.createElement('tr');
@@ -915,6 +919,11 @@ function renderTable() {
       tr.dataset.indent = rowTotal;
       tr.dataset.coll = coll;
 
+      // Image
+      const tdImg = document.createElement('td');
+      tdImg.className = 'image-col';
+      tdImg.appendChild(productThumb(row.image));
+      tr.appendChild(tdImg);
       // Style
       addTd(tr, row.style, 'style-col');
       // Description
@@ -1124,7 +1133,7 @@ function renderTable() {
     const str = document.createElement('tr');
     str.className = 'coll-subtotal';
     str.dataset.coll = coll;
-    const labelColCount = 4 + (sizesVisible ? 1 : 0); // style+desc+colour+category+[sizes]
+    const labelColCount = 5 + (sizesVisible ? 1 : 0); // image+style+desc+colour+category+[sizes]
     const stLabelTd = document.createElement('td');
     stLabelTd.colSpan = labelColCount;
     stLabelTd.className = 'subtotal-label';
@@ -1336,6 +1345,23 @@ function updateBadge(type) {
   }
 }
 
+// AM product image thumbnail, or a placeholder when the style has none (or the URL fails to load).
+function productThumb(url) {
+  const placeholder = () => { const d = document.createElement('div'); d.className = 'product-thumb placeholder'; d.textContent = '🧵'; return d; };
+  if (!url) return placeholder();
+  const img = document.createElement('img');
+  img.className = 'product-thumb';
+  img.src = url;
+  img.alt = '';
+  img.loading = 'lazy';
+  img.addEventListener('error', () => img.replaceWith(placeholder()));
+  return img;
+}
+
+function firstImage(product) {
+  return Array.isArray(product.images) && product.images.length ? product.images[0].img || null : null;
+}
+
 function addTd(tr, text, cls) {
   const td = document.createElement('td');
   if (cls) td.className = cls;
@@ -1420,6 +1446,8 @@ async function fetchStyleStock(style) {
     const prodData = await prodRes.json();
     if (!prodData.response || !prodData.response.length) { amStock[style] = null; return; }
     const productId = prodData.response[0].product_id;
+    const img = firstImage(prodData.response[0]);
+    if (img) pivotRows.forEach(r => { if (r.style === style && !r.image) r.image = img; });
     const invRes    = await fetch(`${AM_FUNC}?path=${encodeURIComponent('sku_warehouse?product_id=' + productId + '&warehouse_id=' + ONLINE_STORE_WAREHOUSE_ID)}`);
     const invData   = await invRes.json();
     amStock[style]  = (invData.response || []).reduce((s, r) => s + parseFloat(r.qty_avail_sell || 0), 0);
@@ -2404,6 +2432,7 @@ async function loadNewAMProducts(prog) {
           colour: (() => { const w = p.web_title || ''; const d = p.description || ''; return w.startsWith(d + ' - ') ? w.slice(d.length + 3).trim() : ''; })(),
           collection: p.collection || coll,
           category: p.category || '',
+          image: firstImage(p),
           sizes,
           fromAM: true
         });

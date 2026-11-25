@@ -24,6 +24,12 @@ function colourFromWebTitle(product) {
   return w.startsWith(d + ' - ') ? w.slice(d.length + 3).trim() : '';
 }
 
+// First AM product image — a direct public S3 URL (same field the Out of Range
+// Products app uses), shown as a thumbnail on the working page.
+function firstImage(product) {
+  return Array.isArray(product.images) && product.images.length ? product.images[0].img || null : null;
+}
+
 async function buildStyleMap(collections) {
   const styleMap = {};
   for (const collection of collections) {
@@ -36,6 +42,7 @@ async function buildStyleMap(collections) {
         category: p.category || '',
         desc: p.description || '',
         colour: colourFromWebTitle(p),
+        image: firstImage(p),
       };
     });
   }
@@ -97,6 +104,7 @@ async function pullOrderItems({
           colours: new Set(),
           collection: meta.collection,
           category: meta.category,
+          image: meta.image,
           sizes: {},
           accounts: new Map(), // customer_id -> { name, units }
         };
@@ -122,6 +130,7 @@ async function pullOrderItems({
     colour: [...r.colours].join(', '),
     collection: r.collection,
     category: r.category,
+    image: r.image || null,
     sizes: r.sizes,
     ...(trackAccounts ? {
       accounts: r.accounts.size,
