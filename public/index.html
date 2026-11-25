@@ -1141,6 +1141,7 @@ function renderTable() {
     str.appendChild(stLabelTd);
     if (!totalsOnly) {
       const stIndent = document.createElement('td'); stIndent.className = 'num subtotal-indent'; stIndent.textContent = collTotal.toLocaleString(); str.appendChild(stIndent);
+      str.appendChild(document.createElement('td')); // accts purchased placeholder
     }
     if (amStockLoaded)           { const td = document.createElement('td'); str.appendChild(td); } // avail sell placeholder
     if (onlineStoreOrdersLoaded) { const td = document.createElement('td'); str.appendChild(td); } // online on order placeholder
