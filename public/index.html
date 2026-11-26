@@ -2391,12 +2391,23 @@ function renderPOSummaryPDF(rows, sizeCols, heading) {
 }
 
 // ── Load & refresh AM products/stock ──────────────────────────────────────────
+// AM returns products 100 at a time — follow the last_id cursor until it runs out,
+// otherwise collections with more than 100 products (e.g. AA CORE STYLES) get cut off.
 async function fetchAMProductsForGroup(groupName) {
   const results = [];
-  const path = 'products/?group=' + encodeURIComponent(groupName);
-  const res = await fetch(AM_FUNC + '?path=' + encodeURIComponent(path));
-  const data = await res.json();
-  results.push(...(data.response || []));
+  let lastId = null;
+  for (;;) {
+    let path = 'products/?group=' + encodeURIComponent(groupName);
+    if (lastId) path += '&pagination[last_id]=' + encodeURIComponent(lastId);
+    const res = await fetch(AM_FUNC + '?path=' + encodeURIComponent(path));
+    const data = await res.json();
+    const rows = data.response || [];
+    if (!rows.length) break;
+    results.push(...rows);
+    const next = data.meta && data.meta.pagination && data.meta.pagination.last_id;
+    if (!next || next === lastId) break;
+    lastId = next;
+  }
   return results;
 }
 
