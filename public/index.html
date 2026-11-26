@@ -1942,12 +1942,33 @@ function exportXLSX() {
 
   XLSX.utils.book_append_sheet(wb, ws, 'Order Analysis');
 
-  // Month Totals sheet (always included when month data exists)
+  // Month Totals sheet (always included when month data exists). Starts with the
+  // Online Order matrix (Category × Month Del, same as the Summary view), then the
+  // month-by-month category breakdown.
   const { monthMap, monthOrder } = buildMonthTotalsData();
   if (monthOrder.length > 0) {
     const mHdrs = ['Category', 'Styles', 'Indent Orders', 'Online Orders', 'Grand Total'];
-    const mData = [mHdrs];
-    const mMeta = [null];
+    const mData = [];
+    const mMeta = [];
+    const ooM = buildOnlineMatrixData();
+    if (ooM.grand) {
+      mData.push(['Online Orders by Category & Month Del']);
+      mMeta.push({ type: 'title' });
+      mData.push(['Category', ...ooM.months.map(m => m === '(No Month)' ? 'No Month' : m), 'Total']);
+      mMeta.push({ type: 'header' });
+      ooM.cats.forEach((cat, idx) => {
+        mData.push([cat, ...ooM.months.map(m => ooM.cells[cat][m] || ''), ooM.catTotals[cat]]);
+        mMeta.push({ type: 'data', even: idx % 2 === 1 });
+      });
+      mData.push(['Total', ...ooM.months.map(m => ooM.monthTotals[m]), ooM.grand]);
+      mMeta.push({ type: 'total' });
+      mData.push([]);
+      mMeta.push(null);
+      mData.push(['Month Totals']);
+      mMeta.push({ type: 'title' });
+    }
+    mData.push(mHdrs);
+    mMeta.push({ type: 'header' });
     let mTotStyles = 0, mTotIndent = 0, mTotOO = 0;
     monthOrder.forEach(month => {
       const m = monthMap[month];
@@ -1968,15 +1989,18 @@ function exportXLSX() {
     mData.push(['Total', mTotStyles, mTotIndent, mTotOO, mTotIndent + mTotOO]);
     mMeta.push({ type: 'total' });
     const mws = XLSX.utils.aoa_to_sheet(mData);
-    mws['!cols'] = [{wch:28},{wch:10},{wch:16},{wch:16},{wch:14}];
+    const mCols = [{wch:28},{wch:10},{wch:16},{wch:16},{wch:14}];
+    const widest = Math.max(...mData.map(r => r.length));
+    while (mCols.length < widest) mCols.push({wch:12});
+    mws['!cols'] = mCols;
     mMeta.forEach((meta, ri) => {
       if (!meta) return;
-      const range = XLSX.utils.decode_range(mws['!ref']);
-      for (let ci = range.s.c; ci <= range.e.c; ci++) {
+      // Style only this row's own cells — the matrix and the breakdown can differ in width
+      for (let ci = 0; ci < mData[ri].length; ci++) {
         const addr = XLSX.utils.encode_cell({r: ri, c: ci});
         if (!mws[addr]) mws[addr] = {v: '', t: 's'};
         mws[addr].s = mws[addr].s || {};
-        if (meta.type === 'month') {
+        if (meta.type === 'header' || meta.type === 'month') {
           mws[addr].s.fill = { fgColor: { rgb: '111111' } };
           mws[addr].s.font = { bold: true, color: { rgb: 'FFFFFF' } };
         } else if (meta.type === 'subtotal') {
@@ -1985,16 +2009,13 @@ function exportXLSX() {
         } else if (meta.type === 'total') {
           mws[addr].s.fill = { fgColor: { rgb: 'DEDEDC' } };
           mws[addr].s.font = { bold: true };
+        } else if (meta.type === 'title') {
+          mws[addr].s.font = { bold: true, sz: 12 };
         } else if (meta.even) {
           mws[addr].s.fill = { fgColor: { rgb: 'F7F7F5' } };
         }
       }
     });
-    // Column header row styling
-    for (let ci = 0; ci < mHdrs.length; ci++) {
-      const addr = XLSX.utils.encode_cell({r: 0, c: ci});
-      mws[addr].s = { fill: { fgColor: { rgb: '111111' } }, font: { bold: true, color: { rgb: 'FFFFFF' } } };
-    }
     XLSX.utils.book_append_sheet(wb, mws, 'Month Totals');
   }
 
@@ -2241,6 +2262,58 @@ function exportPDF() {
     doc.text(new Date().toLocaleDateString('en-AU', {day:'2-digit', month:'short', year:'numeric'}), 14, 27);
     doc.setTextColor(0);
 
+    // Online Order matrix (Category × Month Del, same as the Summary view) opens the
+    // breakdown; the month-by-month table follows underneath.
+    let mStartY = 31;
+    const ooM = buildOnlineMatrixData();
+    if (ooM.grand) {
+      const sectionLabel = (text, y) => {
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(17);
+        doc.text(text, 14, y);
+        doc.setTextColor(0);
+      };
+      sectionLabel('ONLINE ORDERS BY CATEGORY & MONTH DEL', 35);
+      const nM = ooM.months.length;
+      const monthW = Math.min(24, (PW - 28 - 60 - 26) / Math.max(nM, 1));
+      const ooCols = { 0: { cellWidth: 60 } };
+      ooM.months.forEach((m, i) => { ooCols[i + 1] = { cellWidth: monthW, halign: 'right' }; });
+      ooCols[nM + 1] = { cellWidth: 26, halign: 'right', fontStyle: 'bold' };
+      const ooBody = ooM.cats.map(cat => [
+        cat,
+        ...ooM.months.map(m => ooM.cells[cat][m] ? ooM.cells[cat][m].toLocaleString() : '—'),
+        ooM.catTotals[cat].toLocaleString(),
+      ]);
+      ooBody.push(['Total', ...ooM.months.map(m => ooM.monthTotals[m].toLocaleString()), ooM.grand.toLocaleString()]);
+      const ooTotalRow = ooBody.length - 1, ooTotalCol = nM + 1;
+      doc.autoTable({
+        startY: 38,
+        head: [['Category', ...ooM.months.map(m => m === '(No Month)' ? 'No Month' : m), 'Total']],
+        body: ooBody,
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 2.5, font: 'helvetica', textColor: [50,50,50] },
+        headStyles: { fillColor: [17,17,17], textColor: [255,255,255], fontStyle: 'bold', fontSize: 8 },
+        columnStyles: ooCols,
+        margin: { left: 14, right: 14 },
+        didParseCell: function(data) {
+          if (data.section === 'head') { if (data.column.index > 0) data.cell.styles.halign = 'right'; return; }
+          if (data.section !== 'body') return;
+          if (data.row.index === ooTotalRow) {
+            data.cell.styles.fillColor = data.column.index === ooTotalCol ? [210,210,208] : [222,222,220];
+            data.cell.styles.fontStyle = 'bold';
+          } else if (data.column.index === ooTotalCol) {
+            data.cell.styles.fillColor = [236,236,234];
+          } else {
+            data.cell.styles.fillColor = data.row.index % 2 === 1 ? [247,247,245] : [255,255,255];
+            if (data.cell.raw === '—') data.cell.styles.textColor = [190,190,190];
+          }
+        }
+      });
+      let labelY = doc.lastAutoTable.finalY + 10;
+      if (labelY > PH - 60) { doc.addPage(); labelY = 16; } // under ~60mm left — start the (long) breakdown on a fresh page
+      sectionLabel('MONTH TOTALS', labelY);
+      mStartY = labelY + 3;
+    }
+
     const mHdrs = ['Category', 'Styles', 'Indent Orders', 'Online Orders', 'Grand Total'];
     const mBody = [];
     const mMeta = [];
@@ -2265,7 +2338,7 @@ function exportPDF() {
     mMeta.push({ type: 'total' });
 
     doc.autoTable({
-      startY: 31,
+      startY: mStartY,
       head: [mHdrs],
       body: mBody,
       theme: 'grid',
