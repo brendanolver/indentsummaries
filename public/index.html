@@ -217,6 +217,7 @@ tr.accts-detail-row td{background:#fbfbfa;padding:0;border-bottom:1px solid #f0f
       <button type="button" class="dropdown-btn" id="dd-data-btn" onclick="toggleDropdown('data')">Data<span class="dd-arrow">&#9662;</span></button>
       <div class="dropdown-panel" id="dd-data-panel">
         <button type="button" class="dd-item" id="new-summary-btn" onclick="startNewSummary()">New Summary</button>
+        <button type="button" class="dd-item" id="repull-btn" onclick="openRepull()">Re-pull Orders from AM…</button>
         <button type="button" class="dd-item" id="replace-btn" onclick="document.getElementById('replace-input').click()">Upload New CSV</button>
         <button type="button" class="dd-item" id="fetch-am-btn" onclick="refreshAMData()">↻ Refresh AM Data</button>
       </div>
@@ -420,6 +421,62 @@ tr.accts-detail-row td{background:#fbfbfa;padding:0;border-bottom:1px solid #f0f
   </div>
 </div>
 
+<div class="po-preview-overlay" id="repull-overlay">
+  <div class="po-preview-card" style="max-width:460px">
+    <div class="po-preview-header">
+      <div>
+        <div class="po-preview-heading">Re-pull Orders from ApparelMagic</div>
+        <div class="po-preview-sub">Keeps your Online Order, Month Del, Cancel &amp; Comments</div>
+      </div>
+      <button type="button" class="po-preview-close" onclick="closeRepull()">&times;</button>
+    </div>
+    <div class="po-opt-body">
+      <div class="po-opt-field">
+        <span class="po-opt-label">Collections to include</span>
+        <div class="po-opt-coll-list" id="repull-collections"></div>
+      </div>
+      <div class="po-opt-field">
+        <span class="po-opt-label">Indent sell date</span>
+        <div style="display:flex;gap:12px">
+          <label style="flex:1;display:flex;flex-direction:column;gap:6px">
+            <span class="po-opt-hint">From</span>
+            <input type="date" id="repull-sell-from" class="po-opt-input">
+          </label>
+          <label style="flex:1;display:flex;flex-direction:column;gap:6px">
+            <span class="po-opt-hint">To (optional)</span>
+            <input type="date" id="repull-sell-to" class="po-opt-input">
+          </label>
+        </div>
+      </div>
+      <div class="po-opt-field">
+        <span class="po-opt-label">Delivery date</span>
+        <div style="display:flex;gap:12px">
+          <label style="flex:1;display:flex;flex-direction:column;gap:6px">
+            <span class="po-opt-hint">From (optional)</span>
+            <input type="date" id="repull-del-from" class="po-opt-input">
+          </label>
+          <label style="flex:1;display:flex;flex-direction:column;gap:6px">
+            <span class="po-opt-hint">To (optional)</span>
+            <input type="date" id="repull-del-to" class="po-opt-input">
+          </label>
+        </div>
+      </div>
+      <label class="po-opt-field">
+        <span class="po-opt-label">Sales Order numbers to exclude</span>
+        <input type="text" id="repull-exclude" class="po-opt-input" placeholder="e.g. 124389, 137693">
+      </label>
+      <span class="po-opt-hint">Pre-filled with your last pull. Entries stay matched to their style code. Click Save afterwards to keep the re-pulled version.</span>
+    </div>
+    <div class="po-preview-footer">
+      <div id="repull-status" style="font-size:11.5px;color:#bbb"></div>
+      <div class="po-preview-actions">
+        <button type="button" class="btn" onclick="closeRepull()">Cancel</button>
+        <button type="button" class="btn btn-primary" id="repull-submit" onclick="submitRepull()">Re-pull</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="po-preview-overlay" id="po-options-overlay">
   <div class="po-preview-card" style="max-width:460px">
     <div class="po-preview-header">
@@ -552,7 +609,7 @@ document.getElementById('search-input').addEventListener('input', e => { searchQ
 // ── AM collection pull ───────────────────────────────────────────────────────
 let amCollectionsList = [];
 let pullCollections = new Set();
-let lastPullParams = null; // { collections, sellDateFrom, sellDateTo } — remembered so the PO Summary export can reuse the same collections
+let lastPullParams = null; // { collections, sellDateFrom, sellDateTo, deliveryDateFrom, deliveryDateTo, excludeOrderIds } — reused by Re-pull, PO Summary and the zero-order product load
 let lastPOHeading = ''; // remembered across exports in this session
 let lastPOSellDateFrom = ''; // independent of the indent pull's dates — POs are typically raised
 let lastPOSellDateTo = '';   // against older orders, so these are usually left blank (no date filter)
@@ -597,17 +654,54 @@ function updatePullCollLabel() {
   label.textContent = n ? n + ' collection' + (n > 1 ? 's' : '') + ' selected' : 'Select collections…';
 }
 
+function parseOrderIds(raw) {
+  return (raw || '').trim() ? raw.split(',').map(s => s.trim()).filter(Boolean) : [];
+}
+
+function pullParamsError(p) {
+  if (!p.collections.length) return 'Select at least one collection.';
+  if (!p.sellDateFrom) return 'Set the indent sell start date.';
+  if (p.sellDateTo && p.sellDateTo < p.sellDateFrom) return 'The "to" sell date must be on or after the "from" date.';
+  if (p.deliveryDateFrom && p.deliveryDateTo && p.deliveryDateTo < p.deliveryDateFrom) return 'The "to" delivery date must be on or after the "from" date.';
+  return null;
+}
+
+// POSTs a pull to the server; resolves to { pivotRows, sizeColumns } or throws a user-facing message.
+async function requestIndentPull(p) {
+  let res, data;
+  try {
+    res = await fetch('/api/am/pull', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        collections: p.collections,
+        sellDateFrom: p.sellDateFrom,
+        sellDateTo: p.sellDateTo || undefined,
+        deliveryDateFrom: p.deliveryDateFrom || undefined,
+        deliveryDateTo: p.deliveryDateTo || undefined,
+        excludeOrderIds: p.excludeOrderIds.length ? p.excludeOrderIds : undefined,
+      })
+    });
+    data = await res.json();
+  } catch (e) {
+    throw new Error('Pull failed: ' + e.message);
+  }
+  if (!res.ok) throw new Error(data.error || 'Pull failed.');
+  if (!data.pivotRows || !data.pivotRows.length) throw new Error('No matching indent orders found for that selection.');
+  return data;
+}
+
 async function pullFromAM() {
-  const sellDateFrom = document.getElementById('pull-sell-date-from').value;
-  const sellDateTo = document.getElementById('pull-sell-date-to').value;
-  const deliveryDateFrom = document.getElementById('pull-del-date-from').value;
-  const deliveryDateTo = document.getElementById('pull-del-date-to').value;
-  const excludeRaw = document.getElementById('pull-exclude-orders').value.trim();
-  const excludeOrderIds = excludeRaw ? excludeRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
-  if (!pullCollections.size) { showError('Select at least one collection.'); return; }
-  if (!sellDateFrom) { showError('Set the indent sell start date.'); return; }
-  if (sellDateTo && sellDateTo < sellDateFrom) { showError('The "to" sell date must be on or after the "from" date.'); return; }
-  if (deliveryDateFrom && deliveryDateTo && deliveryDateTo < deliveryDateFrom) { showError('The "to" delivery date must be on or after the "from" date.'); return; }
+  const params = {
+    collections: [...pullCollections],
+    sellDateFrom: document.getElementById('pull-sell-date-from').value,
+    sellDateTo: document.getElementById('pull-sell-date-to').value || null,
+    deliveryDateFrom: document.getElementById('pull-del-date-from').value || null,
+    deliveryDateTo: document.getElementById('pull-del-date-to').value || null,
+    excludeOrderIds: parseOrderIds(document.getElementById('pull-exclude-orders').value),
+  };
+  const err = pullParamsError(params);
+  if (err) { showError(err); return; }
   hideError();
   const btn = document.getElementById('pull-am-btn');
   const prog = document.getElementById('pull-progress');
@@ -615,27 +709,13 @@ async function pullFromAM() {
   prog.classList.add('visible');
   prog.textContent = 'Pulling from ApparelMagic…';
   try {
-    const res = await fetch('/api/am/pull', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        collections: [...pullCollections],
-        sellDateFrom,
-        sellDateTo: sellDateTo || undefined,
-        deliveryDateFrom: deliveryDateFrom || undefined,
-        deliveryDateTo: deliveryDateTo || undefined,
-        excludeOrderIds: excludeOrderIds.length ? excludeOrderIds : undefined,
-      })
-    });
-    const data = await res.json();
-    if (!res.ok) { showError(data.error || 'Pull failed.'); return; }
-    if (!data.pivotRows || !data.pivotRows.length) { showError('No matching indent orders found for that selection.'); return; }
+    const data = await requestIndentPull(params);
     pivotRows = data.pivotRows;
     sizeColumns = data.sizeColumns;
-    lastPullParams = { collections: [...pullCollections], sellDateFrom, sellDateTo: sellDateTo || null };
+    lastPullParams = params;
     finalizeLoad();
   } catch (e) {
-    showError('Pull failed: ' + e.message);
+    showError(e.message);
   } finally {
     btn.disabled = false;
     prog.classList.remove('visible');
@@ -755,7 +835,8 @@ function parseCSV(text) {
 }
 
 // Shared tail for any path that populates pivotRows/sizeColumns (CSV parse, AM pull, AM products merge)
-function finalizeLoad() {
+function finalizeLoad(opts) {
+  const keepInputs = !!(opts && opts.keepInputs); // re-pull: keep Cancel ticks too
   // Sort: collection priority, then style
   pivotRows.sort((a, b) => {
     const ca = collRank(a.collection), cb = collRank(b.collection);
@@ -767,7 +848,7 @@ function finalizeLoad() {
   filterCollections = new Set();
   filterCategories = new Set();
   filterMonthDel = new Set();
-  cancelled = {};
+  if (!keepInputs) cancelled = {};
   filterCancelled = '';
   amStock = {};
   amStockLoaded = false;
@@ -1426,10 +1507,13 @@ function updateSummary(rows, units, grand) {
   document.getElementById('stat-units').textContent = units.toLocaleString();
   document.getElementById('stat-grand').textContent = grand.toLocaleString();
   // Online On Order: sum from onlineStoreOrders for non-cancelled visible rows
-  const ooTotal = Object.entries(onlineOrders).reduce((s, [style, qty]) => {
-    return s + (cancelled[style] ? 0 : (qty || 0));
-  }, 0);
-  document.getElementById('stat-online-orders').textContent = ooTotal.toLocaleString();
+  document.getElementById('stat-online-orders').textContent = onlineOrderUnitsTotal().toLocaleString();
+}
+
+function onlineOrderUnitsTotal() {
+  const present = new Set(pivotRows.map(r => r.style));
+  return Object.entries(onlineOrders).reduce((s, [style, qty]) =>
+    s + (present.has(style) && !cancelled[style] ? (qty || 0) : 0), 0);
 }
 
 function updateSummaryLive() {
@@ -1443,10 +1527,7 @@ function updateSummaryLive() {
   document.getElementById('stat-rows').textContent  = r.toLocaleString();
   document.getElementById('stat-units').textContent = u.toLocaleString();
   document.getElementById('stat-grand').textContent = g.toLocaleString();
-  const ooTotal = Object.entries(onlineOrders).reduce((s, [style, qty]) => {
-    return s + (cancelled[style] ? 0 : (qty || 0));
-  }, 0);
-  document.getElementById('stat-online-orders').textContent = ooTotal.toLocaleString();
+  document.getElementById('stat-online-orders').textContent = onlineOrderUnitsTotal().toLocaleString();
 }
 
 // ── Show app ─────────────────────────────────────────────────────────────────
@@ -2266,6 +2347,106 @@ function renderPOOptionsCollections() {
     });
     panel.appendChild(item);
   });
+}
+
+// ── Re-pull orders from AM, keeping everything entered ────────────────────────
+// Re-runs the indent pull (pre-filled with the last pull's settings) and swaps in
+// the fresh order data. Online Order / Month Del / Cancel / Comments are keyed by
+// style code, so they carry straight across to the re-pulled rows.
+let repullCollectionsSet = new Set();
+
+async function openRepull() {
+  closeAllDropdowns();
+  const p = lastPullParams || {};
+  repullCollectionsSet = new Set(p.collections && p.collections.length
+    ? p.collections
+    : pivotRows.map(r => r.collection).filter(Boolean));
+  document.getElementById('repull-sell-from').value = p.sellDateFrom || '';
+  document.getElementById('repull-sell-to').value = p.sellDateTo || '';
+  document.getElementById('repull-del-from').value = p.deliveryDateFrom || '';
+  document.getElementById('repull-del-to').value = p.deliveryDateTo || '';
+  document.getElementById('repull-exclude').value = (p.excludeOrderIds || []).join(', ');
+  const status = document.getElementById('repull-status');
+  status.textContent = '';
+  status.style.color = '';
+  document.getElementById('repull-submit').disabled = false;
+  renderRepullCollections();
+  document.getElementById('repull-overlay').classList.add('visible');
+
+  // The full collection list is only fetched on a fresh start — load it now if this
+  // session was resumed, so collections not in the last pull can be ticked too.
+  if (!amCollectionsList.length) {
+    status.textContent = 'Loading collection list…';
+    await loadPullCollections();
+    if (status.textContent === 'Loading collection list…') status.textContent = '';
+    renderRepullCollections();
+  }
+}
+
+function renderRepullCollections() {
+  const panel = document.getElementById('repull-collections');
+  panel.innerHTML = '';
+  const list = [...amCollectionsList, ...[...repullCollectionsSet].filter(c => !amCollectionsList.includes(c))];
+  list.forEach(c => {
+    const item = document.createElement('label');
+    item.className = 'po-opt-coll-item';
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.checked = repullCollectionsSet.has(c);
+    chk.addEventListener('change', e => {
+      if (e.target.checked) repullCollectionsSet.add(c); else repullCollectionsSet.delete(c);
+    });
+    const name = document.createElement('span');
+    name.textContent = c;
+    item.appendChild(chk);
+    item.appendChild(name);
+    panel.appendChild(item);
+  });
+}
+
+function closeRepull() {
+  document.getElementById('repull-overlay').classList.remove('visible');
+}
+
+async function submitRepull() {
+  const params = {
+    collections: [...repullCollectionsSet],
+    sellDateFrom: document.getElementById('repull-sell-from').value,
+    sellDateTo: document.getElementById('repull-sell-to').value || null,
+    deliveryDateFrom: document.getElementById('repull-del-from').value || null,
+    deliveryDateTo: document.getElementById('repull-del-to').value || null,
+    excludeOrderIds: parseOrderIds(document.getElementById('repull-exclude').value),
+  };
+  const status = document.getElementById('repull-status');
+  const err = pullParamsError(params);
+  if (err) { status.style.color = '#ff8a8a'; status.textContent = err; return; }
+
+  const btn = document.getElementById('repull-submit');
+  btn.disabled = true;
+  status.style.color = '';
+  status.textContent = 'Pulling from ApparelMagic…';
+  try {
+    const data = await requestIndentPull(params);
+    const before = new Set(pivotRows.filter(r => !r.fromAM).map(r => r.style));
+    const after  = new Set(data.pivotRows.map(r => r.style));
+    const added  = [...after].filter(st => !before.has(st)).length;
+    const gone   = [...before].filter(st => !after.has(st)).length;
+
+    pivotRows = data.pivotRows;
+    sizeColumns = data.sizeColumns;
+    lastPullParams = params;
+    closeRepull();
+    finalizeLoad({ keepInputs: true }); // also re-adds zero-order products and refreshes stock
+
+    alert('Re-pulled from ApparelMagic.\n\n' +
+      after.size + ' styles with open indent orders (' + added + ' new, ' + gone + ' no longer on order).\n\n' +
+      'Your Online Order, Month Del, Cancel and Comments entries were kept. Click Save to keep this version.');
+  } catch (e) {
+    status.style.color = '#ff8a8a';
+    status.textContent = e.message;
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function closePOSummaryOptions() {
