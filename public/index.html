@@ -186,6 +186,13 @@ tr.accts-detail-row td{background:#fbfbfa;padding:0;border-bottom:1px solid #f0f
 .po-preview-grand span{font-variant-numeric:tabular-nums;margin-left:8px}
 .po-preview-actions{display:flex;gap:10px;flex-shrink:0}
 .po-preview-actions .btn{border-color:#444}
+/* Summary: near-full-screen Online Order matrix (Category rows × Month Del columns) */
+.summary-card{max-width:1400px;max-height:94vh}
+.summary-body .month-totals-wrap{margin-top:0;border:none;border-radius:0;box-shadow:none;max-height:none;overflow:visible}
+.summary-body .month-totals-wrap thead th{font-size:11px;padding:12px 20px}
+.summary-body .month-totals-wrap td{font-size:13px;padding:11px 20px}
+.summary-body .month-totals-wrap td.mt-zero{color:#ccc}
+.summary-empty{padding:48px 24px;text-align:center;color:#999;font-size:13px}
 .po-opt-body{padding:20px 22px;display:flex;flex-direction:column;gap:16px;overflow-y:auto;max-height:calc(90vh - 140px)}
 .po-opt-field{display:flex;flex-direction:column;gap:6px}
 .po-opt-label{font-size:11px;font-weight:700;color:#111;text-transform:uppercase;letter-spacing:.4px}
@@ -225,6 +232,7 @@ tr.accts-detail-row td{background:#fbfbfa;padding:0;border-bottom:1px solid #f0f
       </div>
     </div>
 
+    <button class="btn" id="summary-btn" style="display:none" onclick="openSummary()">Summary</button>
     <button class="btn" id="save-session-btn" style="display:none" onclick="saveSession()">Save</button>
 
     <div class="dropdown-wrap">
@@ -389,6 +397,25 @@ tr.accts-detail-row td{background:#fbfbfa;padding:0;border-bottom:1px solid #f0f
         <thead id="month-totals-head"></thead>
         <tbody id="month-totals-body"></tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+<div class="po-preview-overlay" id="summary-overlay" onclick="if (event.target === this) closeSummary()">
+  <div class="po-preview-card summary-card">
+    <div class="po-preview-header">
+      <div>
+        <div class="po-preview-heading">Online Order Summary</div>
+        <div class="po-preview-sub" id="summary-sub"></div>
+      </div>
+      <button type="button" class="po-preview-close" onclick="closeSummary()">&times;</button>
+    </div>
+    <div class="po-preview-body summary-body table-wrap" id="summary-body" style="border:none;border-radius:0;box-shadow:none;max-height:none"></div>
+    <div class="po-preview-footer">
+      <div class="po-preview-grand">GRAND TOTAL<span id="summary-grand"></span></div>
+      <div class="po-preview-actions">
+        <button type="button" class="btn" onclick="closeSummary()">Close</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1435,6 +1462,7 @@ function showApp() {
   document.getElementById('export-pdf-btn').disabled     = false;
   document.getElementById('export-po-summary-btn').disabled = false;
   document.getElementById('save-session-btn').style.display = 'inline-flex';
+  document.getElementById('summary-btn').style.display = 'inline-flex';
 }
 
 function showError(msg) { const el = document.getElementById('error-banner'); el.textContent = msg; el.style.display = 'block'; }
@@ -1502,6 +1530,101 @@ async function refreshStock(prog) {
 
   await ordersPromise; // make sure orders are done too
 }
+
+// ── Summary: Online Order matrix ─────────────────────────────────────────────
+// Online Order units summed by Category (rows) × Month Del (columns). Follows the
+// same filters as the table and Month Totals, and skips cancelled styles.
+function buildOnlineMatrixData() {
+  const { collections, collMap } = getVisibleRows();
+  const cells = {}, catTotals = {}, monthTotals = {};
+  let grand = 0, visibleCount = 0;
+  collections.forEach(coll => collMap[coll].forEach(row => {
+    visibleCount++;
+    if (cancelled[row.style]) return;
+    const units = onlineOrders[row.style] || 0;
+    if (units <= 0) return;
+    const month = (monthDel[row.style] || '').trim() || '(No Month)';
+    const cat   = row.category || '(No Category)';
+    cells[cat] = cells[cat] || {};
+    cells[cat][month]  = (cells[cat][month] || 0) + units;
+    catTotals[cat]     = (catTotals[cat] || 0) + units;
+    monthTotals[month] = (monthTotals[month] || 0) + units;
+    grand += units;
+  }));
+  return {
+    cells, catTotals, monthTotals, grand,
+    cats: Object.keys(catTotals).sort(),
+    months: sortMonths(Object.keys(monthTotals)),
+    filtered: visibleCount < pivotRows.length,
+  };
+}
+
+function openSummary() {
+  const d = buildOnlineMatrixData();
+  const body = document.getElementById('summary-body');
+  body.innerHTML = '';
+  document.getElementById('summary-sub').textContent =
+    'Units by category and Month Del · cancelled styles excluded' + (d.filtered ? ' · current filters applied' : '');
+  document.getElementById('summary-grand').textContent = d.grand.toLocaleString();
+
+  if (!d.grand) {
+    const empty = document.createElement('div');
+    empty.className = 'summary-empty';
+    empty.textContent = 'No Online Order units yet — enter Online Order units and a Month Del on the working page.';
+    body.appendChild(empty);
+  } else {
+    const monthLabel = m => m === '(No Month)' ? 'No Month' : m;
+    const cell = (tag, text, cls, right) => {
+      const c = document.createElement(tag);
+      c.textContent = text;
+      if (cls) c.className = cls;
+      if (right) c.style.textAlign = 'right';
+      return c;
+    };
+    const wrap = document.createElement('div');
+    wrap.className = 'month-totals-wrap';
+    const table = document.createElement('table');
+
+    const thead = document.createElement('thead');
+    const htr = document.createElement('tr');
+    htr.appendChild(cell('th', 'Category'));
+    d.months.forEach(m => htr.appendChild(cell('th', monthLabel(m), '', true)));
+    htr.appendChild(cell('th', 'Total', '', true));
+    thead.appendChild(htr);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    d.cats.forEach(cat => {
+      const tr = document.createElement('tr');
+      tr.appendChild(cell('td', cat, 'mt-cat'));
+      d.months.forEach(m => {
+        const v = d.cells[cat][m] || 0;
+        tr.appendChild(cell('td', v ? v.toLocaleString() : '—', v ? 'mt-num' : 'mt-num mt-zero'));
+      });
+      tr.appendChild(cell('td', d.catTotals[cat].toLocaleString(), 'mt-grand'));
+      tbody.appendChild(tr);
+    });
+    const ttr = document.createElement('tr');
+    ttr.className = 'mt-total';
+    ttr.appendChild(cell('td', 'Total', 'mt-cat'));
+    d.months.forEach(m => ttr.appendChild(cell('td', d.monthTotals[m].toLocaleString(), 'mt-num')));
+    ttr.appendChild(cell('td', d.grand.toLocaleString(), 'mt-grand'));
+    tbody.appendChild(ttr);
+    table.appendChild(tbody);
+
+    wrap.appendChild(table);
+    body.appendChild(wrap);
+  }
+  document.getElementById('summary-overlay').classList.add('visible');
+}
+
+function closeSummary() {
+  document.getElementById('summary-overlay').classList.remove('visible');
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('summary-overlay').classList.contains('visible')) closeSummary();
+});
 
 // ── Month Totals ─────────────────────────────────────────────────────────────
 function toggleMonthTotals() {
