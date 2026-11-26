@@ -485,7 +485,9 @@ tr.accts-detail-row td{background:#fbfbfa;padding:0;border-bottom:1px solid #f0f
 
 <script>
 const SIZE_ORDER = ['XXS','XS','S','M','L','XL','XXL','XXXL','28','30','32','34','36','38','40','OS'];
-const COLLECTION_PRIORITY = ['ACCESSORIES CURRENT','2026 - AA CORE STYLES'];
+// Collections shown first, in this order. '2026 - AA CORE STYLES' is Core's old AM name,
+// kept so archives saved before the rename still sort the same way.
+const COLLECTION_PRIORITY = ['ACCESSORIES CURRENT','AA CORE STYLES','2026 - AA CORE STYLES'];
 
 let pivotRows = [];
 let sizeColumns = [];
